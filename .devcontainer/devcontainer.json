@@ -1,0 +1,36 @@
+{
+  "name": "claims-intelligence-mvp",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+  "service": "backend",
+  "overrideCommand": true,
+  "runServices": ["backend", "db"],
+  "features": { "ghcr.io/devcontainers/features/node:1": { "version": "22" } },
+  "workspaceFolder": "/workspaces/claims-intelligence-mvp",
+  "forwardPorts": [8000, 5173, 5432],
+  "otherPortsAttributes": { "onAutoForward": "ignore" },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "sqltools.connections": [
+          {
+            "name": "claims (docker db)",
+            "driver": "PostgreSQL",
+            "server": "db",
+            "port": 5432,
+            "database": "app",
+            "username": "app",
+            "password": "app"
+          }
+        ]
+      },
+      "extensions": [
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

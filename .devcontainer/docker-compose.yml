@@ -1,0 +1,5 @@
+services:
+  backend:
+    volumes:
+      # "." resolves against the first compose file (repo root), not this folder.
+      - .:/workspaces/claims-intelligence-mvp:cached

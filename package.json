@@ -1,0 +1,8 @@
+{
+  "name": "claims-intelligence-mvp",
+  "private": true,
+  "scripts": {
+    "start:api": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "start:ui": "cd frontend && npm install && npm run dev"
+  }
+}
