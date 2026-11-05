@@ -1,0 +1,81 @@
+/* ProviDRs Care — design tokens (verbatim from branding.md §7) */
+
+@font-face {
+  font-family: "Marsh Serif";
+  src: url("../assets/fonts/marsh-serif.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --brand-ink: #142225;
+  --brand-dark: #123137;
+  --brand-deep: #0e252a;
+  --brand-accent: #2f9d90;
+  --brand-accent-bright: #45c2b2;
+  --brand-accent-soft: #d9f1ed;
+  --brand-canvas: #f6f8f7;
+  --brand-border: #dbe5e3;
+  --brand-muted: #68787b;
+
+  --ink: var(--brand-ink);
+  --muted: var(--brand-muted);
+  --canvas: var(--brand-canvas);
+  --card: #ffffff;
+  --line: var(--brand-border);
+
+  --sidebar-bg: #f7fbfa;
+  --sidebar-text: var(--brand-ink);
+  --sidebar-muted: var(--brand-muted);
+  --sidebar-border: var(--brand-border);
+
+  --font-body: "Noto Sans", Arial, sans-serif;
+  --font-display: "Marsh Serif", Georgia, serif;
+
+  --sidebar-w: 252px;
+  --sidebar-w-collapsed: 72px;
+  --radius: 10px;
+  --shadow:
+    0 1px 2px rgba(18, 49, 55, 0.06),
+    0 4px 14px rgba(18, 49, 55, 0.05);
+  --shadow-raised:
+    0 10px 24px rgba(18, 49, 55, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --shadow-popover:
+    0 8px 24px rgba(18, 49, 55, 0.12),
+    0 2px 8px rgba(18, 49, 55, 0.06);
+
+  --success: #14853d;
+  --danger: #c53532;
+
+  --neutral-250: var(--brand-canvas);
+  --neutral-500: #c7d3d0;
+
+  /* Declared per branding §7 recommendation */
+  --foreground: #1a2421;
+  --surface: #f8fafa;
+  --error: #c0392b;
+
+  --favorable: #23866e;
+  --unfavorable: #c14c43;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--canvas);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; }
+a { color: var(--brand-accent); }
+:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
