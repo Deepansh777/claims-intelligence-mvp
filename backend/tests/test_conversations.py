@@ -258,8 +258,8 @@ def test_export_csv_is_the_stored_result(http, llm):
     assert float(value) == pytest.approx(result["components"][0]["value"])
     assert http.get(f"{API}/runs/{result['run_id']}/export.csv?query=q2").status_code == 404
     assert http.get(f"{API}/runs/{result['run_id']}/export.csv?query=x").status_code == 422
-    assert conversation_service._cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
-    assert conversation_service._cell(-5) == -5
+    assert conversation_service.csv_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert conversation_service.csv_cell(-5) == -5
 
 
 def test_meta(http):

@@ -6,6 +6,8 @@ run_query's: validator, read-only transaction, and the analytics role's grants.
 """
 
 import asyncio
+import csv
+import io
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -13,6 +15,7 @@ from typing import Any
 
 from app.llm.schemas import QueryError, QueryResult
 from app.services.analytics_sql import run_query, validate_sql
+from app.services.conversation_service import csv_cell
 
 ROW_CAP = 10_000
 PAGE_SIZE = 50
@@ -79,6 +82,18 @@ def cancel(user_id: str, query_id: uuid.UUID) -> bool:
         return False
     q.task.cancel()
     return True
+
+
+def to_csv(q: Query) -> str | None:
+    """The whole stored (capped) result; None unless the query succeeded."""
+    if not q.task.done() or q.task.cancelled() or q.task.exception():
+        return None
+    r = q.task.result()
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(r.columns)
+    writer.writerows([csv_cell(v) for v in row] for row in r.rows)
+    return out.getvalue()
 
 
 def page(query_id: uuid.UUID, q: Query, n: int) -> dict[str, Any]:

@@ -78,7 +78,7 @@ async def delete_conversation(user: CurrentUser, conversation_id: uuid.UUID) -> 
     return deleted
 
 
-def _cell(value):
+def csv_cell(value):
     # Spreadsheet apps execute cells starting with these characters as formulas.
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
         return "'" + value
@@ -96,7 +96,7 @@ async def export_csv(user: CurrentUser, run_id: uuid.UUID, query: str) -> str | 
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(data["columns"])
-    writer.writerows([_cell(v) for v in row] for row in data["rows"])
+    writer.writerows([csv_cell(v) for v in row] for row in data["rows"])
     return out.getvalue()
 
 

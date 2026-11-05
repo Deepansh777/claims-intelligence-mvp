@@ -74,6 +74,19 @@ async def query_page(query_id: uuid.UUID, user: User, page: Annotated[int, Query
     return sql_workspace.page(query_id, q, page)
 
 
+@router.get("/queries/{query_id}/export.csv")
+async def export_query(query_id: uuid.UUID, user: User):
+    q = sql_workspace.get(user.id, query_id)
+    body = sql_workspace.to_csv(q) if q else None
+    if body is None:
+        return _error(404, "This result has expired. Run the query again.", "not_found")
+    return Response(
+        body,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="query-{query_id}.csv"'},
+    )
+
+
 @router.delete("/queries/{query_id}", status_code=204)
 async def cancel_query(query_id: uuid.UUID, user: User):
     if not sql_workspace.cancel(user.id, query_id):

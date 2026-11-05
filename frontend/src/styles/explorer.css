@@ -20,6 +20,7 @@
 .sw-type { display: block; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 0.7rem; }
 .sw-grid .table .sw-rownum { color: var(--muted); text-align: right; width: 1%; font-variant-numeric: tabular-nums; }
 .sw-footer { align-items: center; gap: 10px; }
+.sw-footer .btn { white-space: nowrap; }
 
 /* ---- Database map ---- */
 

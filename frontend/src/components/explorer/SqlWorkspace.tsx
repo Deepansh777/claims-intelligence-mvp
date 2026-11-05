@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror, { EditorView, keymap, Prec } from "@uiw/react-codemirror";
 import { PostgreSQL, sql as sqlLanguage } from "@codemirror/lang-sql";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { apiGet, apiSend } from "../../lib/apiClient";
+import { apiGet, apiSend, BASE_URL } from "../../lib/apiClient";
 import { isNumericType } from "../../lib/format";
 import { Icon } from "../Icon";
 
@@ -136,6 +136,15 @@ function ResultsGrid({ result, loading, onPage }: { result: QueryPage; loading: 
         <button className="btn btn-secondary" disabled={loading || !result.has_next} onClick={() => onPage(result.page + 1)}>
           Next page
         </button>
+        <a
+          className="btn btn-secondary"
+          href={`${BASE_URL}/explorer/queries/${result.id}/export.csv`}
+          download
+          title={result.capped ? `Exports the first ${result.row_cap.toLocaleString()} rows` : "Exports every row of this result"}
+        >
+          <Icon name="download" />
+          Export Data
+        </a>
       </div>
     </div>
   );

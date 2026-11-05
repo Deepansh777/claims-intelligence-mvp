@@ -61,6 +61,19 @@ def test_rejects_writes_and_ddl(http, sql):
         assert r.status_code == 400 and r.json()["code"] == "invalid_sql"
 
 
+def test_export_csv_is_the_whole_stored_result(http):
+    as_user()
+    qid = _run(http, "SELECT g, '=1+1' AS f FROM generate_series(1, 120) g").json()["id"]
+    r = http.get(f"{URL}/{qid}/export.csv")
+    lines = r.text.splitlines()
+    assert r.headers["content-type"].startswith("text/csv")
+    assert lines[0] == "g,f" and len(lines) == 121 and lines[1] == "1,'=1+1"
+    failed = _run(http, "SELECT * FROM raw.no_such_table").json()["id"]
+    assert http.get(f"{URL}/{failed}/export.csv").status_code == 404
+    as_user()
+    assert http.get(f"{URL}/{qid}/export.csv").status_code == 404
+
+
 def test_database_errors_are_reported(http):
     as_user()
     r = _run(http, "SELECT * FROM raw.no_such_table").json()
