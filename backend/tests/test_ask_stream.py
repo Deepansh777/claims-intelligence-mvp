@@ -213,3 +213,19 @@ def test_one_answer_at_a_time(http, llm):
         f"/api/v1/conversations/{conversation['id']}/messages/stream", json={"question": QUESTION}
     )
     assert (r.status_code, r.json()["code"]) == (409, "conflict")
+
+
+def test_llm_schemas_are_accepted_by_openai_structured_output():
+    for schema in (SqlPlan, AnswerSpec):
+        assert "oneOf" not in json.dumps(schema.model_json_schema())
+    spec = AnswerSpec.model_validate(
+        {
+            "outcome": "answered",
+            "text": "t",
+            "components": [{"type": "callout", "tone": "info", "text": "c"}],
+            "assumptions": [],
+            "limitations": [],
+            "followups": [],
+        }
+    )
+    assert type(spec.components[0]).__name__ == "Callout"

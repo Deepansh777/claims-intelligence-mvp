@@ -3,7 +3,7 @@
 No defaults on LLM-facing fields: OpenAI strict structured output requires every field.
 """
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -104,9 +104,8 @@ class Callout(BaseModel):
     text: str
 
 
-Component = Annotated[
-    Kpi | SeriesChart | HBar | Scatter | Table | Callout, Field(discriminator="type")
-]
+# No discriminator: it emits "oneOf", which OpenAI structured output rejects; the type literals still pick the model.
+Component = Kpi | SeriesChart | HBar | Scatter | Table | Callout
 
 
 class AnswerSpec(BaseModel):
