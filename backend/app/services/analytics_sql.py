@@ -48,7 +48,7 @@ def _jsonable(v: Any) -> Any:
     return str(v)
 
 
-async def run_query(sql: str) -> QueryResult:
+async def run_query(sql: str, *args: Any) -> QueryResult:
     validate_sql(sql)
     async with _slots:
         conn = await asyncpg.connect(
@@ -58,7 +58,7 @@ async def run_query(sql: str) -> QueryResult:
             async with conn.transaction(readonly=True):
                 await conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
                 stmt = await conn.prepare(sql)  # prepared statements reject multiple commands
-                records = await (await stmt.cursor()).fetch(MAX_ROWS + 1)
+                records = await (await stmt.cursor(*args)).fetch(MAX_ROWS + 1)
                 attrs = stmt.get_attributes()
         except asyncpg.PostgresError as e:
             raise QueryError(f"{type(e).__name__}: {e}") from e
