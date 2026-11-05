@@ -5,7 +5,7 @@ import { ApiError, apiGet, apiSend, apiStream } from "../lib/apiClient";
 import type { Answer, Conversation, Message, Meta } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Modal } from "../components/Overlay";
-import { AnswerView } from "../components/answer/AnswerView";
+import { AnswerView, RetryButton } from "../components/answer/AnswerView";
 
 const SUGGESTIONS = [
   { label: "PMPM", text: "How did NEXUS PMPM change over the last 12 months?" },
@@ -28,7 +28,7 @@ const EFFORT_INFO: Record<string, string> = {
 };
 const STILL_WORKING_MS = 15000;
 
-type Pending = { question: string; status: string; lastEventAt: number; answer?: Answer; error?: string };
+type Pending = { question: string; status: string; lastEventAt: number; answer?: Answer; error?: string; cancelled?: boolean };
 
 function UserMsg({ text }: { text: string }) {
   return (
@@ -179,7 +179,7 @@ export default function AskPage({ meta }: { meta?: Meta }) {
     enabled: !!conversationId && !pending,
   });
   const messages: Message[] = conversation.data?.messages ?? [];
-  const busy = !!pending && !pending.answer && !pending.error;
+  const busy = !!pending && !pending.answer && !pending.error && !pending.cancelled;
   const net = network ?? meta?.default_network ?? "NEXUS";
   const eff = effort ?? meta?.default_effort ?? "medium";
   const isAdmin = !!meta?.is_admin;
@@ -194,9 +194,16 @@ export default function AskPage({ meta }: { meta?: Meta }) {
     window.scrollTo(0, document.body.scrollHeight);
   }, [messages.length, pending?.status, pending?.answer]);
 
+  const refresh = (id: string) => {
+    qc.invalidateQueries({ queryKey: ["conversations"] });
+    return qc.fetchQuery({ queryKey: ["conversation", id], queryFn: () => apiGet<Conversation>(`/conversations/${id}`) });
+  };
+
   async function ask(question: string) {
     question = question.trim();
     if (!question || busy) return;
+    // A stopped or failed exchange is only shown locally; load its stored copy before replacing it.
+    if (pending && conversationId) await refresh(conversationId).catch(() => undefined);
     const controller = new AbortController();
     abortRef.current = controller;
     setPending({ question, status: "Sending your question…", lastEventAt: Date.now() });
@@ -217,15 +224,24 @@ export default function AskPage({ meta }: { meta?: Meta }) {
         },
         controller.signal,
       );
-      await qc.fetchQuery({
-        queryKey: ["conversation", id],
-        queryFn: () => apiGet<Conversation>(`/conversations/${id}`),
-      });
-      setPending((p) => (p?.error ? p : null));
+      // The stored copy, including any error, replaces the streamed one.
+      await refresh(id);
+      setPending(null);
     } catch (e) {
       if (controller.signal.aborted) return;
       update({ error: e instanceof ApiError ? e.message : "Something went wrong. Please try again." });
     }
+  }
+
+  // Closing the stream makes the server stop the run and save it as cancelled.
+  function stop() {
+    abortRef.current?.abort();
+    setPending((p) => p && { ...p, cancelled: true });
+  }
+
+  async function rerun(runId: string) {
+    await apiSend("POST", `/runs/${runId}/rerun`);
+    await refresh(conversationId!);
   }
 
   function newChat() {
@@ -299,37 +315,47 @@ export default function AskPage({ meta }: { meta?: Meta }) {
                   Loading conversation…
                 </div>
               )}
-              {messages.map((m) =>
-                m.role === "user" ? (
-                  <UserMsg key={m.id} text={m.content} />
-                ) : (
+              {messages.map((m, i) => {
+                if (m.role === "user") return <UserMsg key={m.id} text={m.content} />;
+                const question = messages[i - 1]?.role === "user" ? messages[i - 1].content : null;
+                const retry = question ? () => ask(question) : undefined;
+                return (
                   <AssistantMsg key={m.id}>
                     {m.answer ? (
-                      <AnswerView answer={m.answer} onAsk={ask} busy={busy} isAdmin={isAdmin} />
+                      <AnswerView
+                        answer={m.answer}
+                        onAsk={ask}
+                        onRetry={retry}
+                        onRerun={() => rerun(m.answer!.run_id)}
+                        busy={busy}
+                        isAdmin={isAdmin}
+                      />
                     ) : m.status === "running" ? (
                       <div className="thinking">
                         <span className="spinner sm" />
-                        This answer was still being prepared when the page was closed.
+                        This answer was still in progress when the page loaded.
                       </div>
                     ) : (
                       <div className="banner banner--error">
                         <Icon name="warn" />
                         <span>{m.content || "This answer could not be completed."}</span>
+                        {retry && <RetryButton onRetry={retry} disabled={busy} />}
                       </div>
                     )}
                   </AssistantMsg>
-                ),
-              )}
+                );
+              })}
               {pending && (
                 <>
                   <UserMsg text={pending.question} />
                   <AssistantMsg>
                     {pending.answer ? (
                       <AnswerView answer={pending.answer} onAsk={ask} busy={busy} isAdmin={isAdmin} />
-                    ) : pending.error ? (
-                      <div className="banner banner--error">
+                    ) : pending.error || pending.cancelled ? (
+                      <div className={`banner banner--${pending.error ? "error" : "warn"}`}>
                         <Icon name="warn" />
-                        <span>{pending.error}</span>
+                        <span>{pending.error ?? "Stopped before an answer was ready."}</span>
+                        <RetryButton onRetry={() => ask(pending.question)} disabled={false} />
                       </div>
                     ) : (
                       <Thinking status={pending.status} lastEventAt={pending.lastEventAt} />
@@ -416,9 +442,15 @@ export default function AskPage({ meta }: { meta?: Meta }) {
                       onPick={setNetwork}
                     />
                   </div>
-                  <button className="composer-send" onClick={send} disabled={busy || !draft.trim()} aria-label="Send">
-                    <Icon name="send" />
-                  </button>
+                  {busy ? (
+                    <button className="composer-send is-stop" onClick={stop} aria-label="Stop" title="Stop this answer">
+                      <Icon name="stop" />
+                    </button>
+                  ) : (
+                    <button className="composer-send" onClick={send} disabled={!draft.trim()} aria-label="Send">
+                      <Icon name="send" />
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="composer-scope">

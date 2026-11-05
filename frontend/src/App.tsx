@@ -6,6 +6,7 @@ import { formatDate } from "./lib/format";
 import type { Meta } from "./lib/types";
 import { Icon } from "./components/Icon";
 import AskPage from "./pages/AskPage";
+import ConversationsPage from "./pages/ConversationsPage";
 import logoUrl from "./assets/logo.png";
 
 // shortcut: single fixed user until Cognito sign-in exists (backend: settings.app_user_id).
@@ -32,6 +33,14 @@ function Sidebar({ meta, collapsed, onCollapse }: { meta?: Meta; collapsed: bool
         >
           <Icon name="ask" />
           <span className="nav-label">Ask</span>
+        </NavLink>
+        <NavLink
+          to="/conversations"
+          className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}
+          title={collapsed ? "Conversations" : undefined}
+        >
+          <Icon name="conversations" />
+          <span className="nav-label">Conversations</span>
         </NavLink>
       </nav>
       <div className="sidebar-footer">
@@ -73,6 +82,7 @@ export default function App() {
         )}
         <Routes>
           <Route path="/ask/:conversationId?" element={<AskPage meta={meta.data} />} />
+          <Route path="/conversations" element={<ConversationsPage meta={meta.data} />} />
           <Route path="*" element={<Navigate to="/ask" replace />} />
         </Routes>
       </main>

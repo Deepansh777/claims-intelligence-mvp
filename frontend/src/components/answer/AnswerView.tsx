@@ -198,14 +198,55 @@ function AnalysisDrawer({ answer, isAdmin, onClose }: { answer: Answer; isAdmin:
   );
 }
 
+export function RetryButton({ onRetry, disabled }: { onRetry: () => void; disabled: boolean }) {
+  return (
+    <button className="link-btn" onClick={onRetry} disabled={disabled} title="Asks the same question again">
+      Retry
+    </button>
+  );
+}
+
+function StaleBanner({ answer, onRerun, busy }: { answer: Answer; onRerun: () => Promise<void>; busy: boolean }) {
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string>();
+  const rerun = async () => {
+    setRunning(true);
+    setError(undefined);
+    try {
+      await onRerun();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The re-run failed.");
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div className="banner banner--warn">
+      <Icon name="warn" />
+      <span>
+        These figures come from an earlier data load
+        {answer.dataset_loaded_at ? ` (${formatDate(answer.dataset_loaded_at)})` : ""}. Newer data is available.
+        {error && ` ${error}`}
+      </span>
+      <button className="link-btn" onClick={rerun} disabled={busy || running} title="Runs the same SQL on the current data; no new interpretation">
+        {running ? "Re-running…" : "Re-run on current data"}
+      </button>
+    </div>
+  );
+}
+
 export function AnswerView({
   answer,
   onAsk,
+  onRetry,
+  onRerun,
   busy,
   isAdmin,
 }: {
   answer: Answer;
   onAsk: (q: string) => void;
+  onRetry?: () => void;
+  onRerun?: () => Promise<void>;
   busy: boolean;
   isAdmin: boolean;
 }) {
@@ -225,11 +266,13 @@ export function AnswerView({
       <div className={`banner banner--${tone}`}>
         <Icon name={tone === "info" ? "info" : "warn"} />
         <span>{o === "cancelled" ? "Stopped before an answer was ready." : answer.text}</span>
+        {o !== "declined" && onRetry && <RetryButton onRetry={onRetry} disabled={busy} />}
       </div>
     );
   } else {
     body = (
       <>
+        {answer.stale && onRerun && answer.queries.length > 0 && <StaleBanner answer={answer} onRerun={onRerun} busy={busy} />}
         <div className={"answer-text" + (o === "unsupported" ? " answer-unsupported" : "")}>{answer.text}</div>
         {answer.interpretation && <Interpretation data={answer.interpretation} />}
         <Components answer={answer} />
