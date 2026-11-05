@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import hljs from "highlight.js/lib/common";
+import "highlight.js/styles/github-dark.css";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "./Icon";
 
 function useEscape(onClose: () => void) {
@@ -51,8 +53,13 @@ export function Drawer({
   );
 }
 
-export function CodeBlock({ code }: { code: string }) {
+export function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
+  const { html, label } = useMemo(() => {
+    const r = language && hljs.getLanguage(language) ? hljs.highlight(code, { language }) : hljs.highlightAuto(code);
+    return { html: r.value, label: language || r.language || "text" };
+  }, [code, language]);
+  const lineNumbers = code.split("\n").map((_, i) => i + 1).join("\n");
   const copy = async () => {
     await navigator.clipboard.writeText(code);
     setCopied(true);
@@ -60,11 +67,20 @@ export function CodeBlock({ code }: { code: string }) {
   };
   return (
     <div className="code-wrap">
-      <button className={"code-copy" + (copied ? " is-done" : "")} type="button" onClick={copy}>
-        <Icon name={copied ? "check" : "copy"} />
-        {copied ? "Copied" : "Copy"}
-      </button>
-      <pre className="code-block">{code}</pre>
+      <div className="code-head">
+        <span className="code-lang">{label}</span>
+        <button className={"code-copy" + (copied ? " is-done" : "")} type="button" onClick={copy}>
+          <Icon name={copied ? "check" : "copy"} />
+          {copied ? "Copied!" : "Copy to clipboard"}
+        </button>
+      </div>
+      <div className="code-scroll">
+        <pre className="code-gutter" aria-hidden="true">{lineNumbers}</pre>
+        {/* highlight.js escapes the source, so its HTML is safe to inject */}
+        <pre className="code-block">
+          <code dangerouslySetInnerHTML={{ __html: html }} />
+        </pre>
+      </div>
     </div>
   );
 }

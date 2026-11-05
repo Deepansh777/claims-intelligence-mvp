@@ -166,7 +166,7 @@ function AnalysisDrawer({ answer, isAdmin, onClose }: { answer: Answer; isAdmin:
                 {q.name} · {q.purpose} · attempt {q.attempt} ·{" "}
                 {q.status === "succeeded" ? `${(q.row_count ?? 0).toLocaleString()} rows in ${formatMs(q.duration_ms)}` : "failed, then corrected"}
               </div>
-              <CodeBlock code={q.sql} />
+              <CodeBlock code={q.sql} language="sql" />
             </div>
           ))
         ) : (

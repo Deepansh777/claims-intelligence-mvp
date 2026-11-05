@@ -243,13 +243,24 @@
 .muted { color: var(--muted); }
 .overline { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.code-wrap { position: relative; }
-.code-block {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; line-height: 1.55;
-  background: #0e252a; color: #d6e9e5; border-radius: 8px; padding: 14px 16px; overflow-x: auto; white-space: pre;
+.code-wrap { background: #0e252a; color: #d6e9e5; border-radius: 8px; overflow: hidden; }
+.code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 8px 6px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
+.code-lang { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.72rem; font-weight: 600; color: #9db8b3; }
+/* Gutter and code share one scroll box, font and line-height, so their lines stay aligned. */
+.code-scroll {
+  display: flex; max-height: 420px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; line-height: 1.55;
+}
+.code-scroll pre { margin: 0; font: inherit; white-space: pre; }
+.code-gutter {
+  position: sticky; left: 0; flex: none; padding: 14px 10px 14px 14px; text-align: right;
+  color: #5f7f7a; background: #0e252a; border-right: 1px solid rgba(255, 255, 255, 0.08); user-select: none;
+}
+.code-block { flex: 1 0 auto; padding: 14px 16px; }
 .code-copy {
-  position: absolute; top: 8px; right: 8px;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 10px; border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.08);
