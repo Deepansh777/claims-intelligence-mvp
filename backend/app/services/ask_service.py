@@ -217,6 +217,7 @@ def _payload(prep: PreparedRun, state: dict, outcome: dict) -> dict:
         "conversation_id": prep.conversation_id,
         "network": prep.network,
         "effort": prep.effort,
+        "model": settings.openai_model,
         "dataset_version_id": prep.dataset_version_id,
         "rerun_of": prep.rerun_of,
         **outcome,

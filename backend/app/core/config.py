@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     analytics_database_url: str
     chat_retention_days: int = 15
     openai_api_key: SecretStr = SecretStr("")
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-6.1-sol"
     openai_timeout_seconds: int = 120
     cors_origins: list[str] = ["http://localhost:5173"]
     # shortcut: single fixed user until Cognito; every query is still scoped by user id.

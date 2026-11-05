@@ -13,6 +13,8 @@ dependencies = [
     "alembic>=1.14",
     "openai>=1.54",
     "httpx>=0.27",
+    "langchain-openai>=1.7.4",
+    "langgraph>=1.2.20",
 ]
 
 [project.optional-dependencies]
