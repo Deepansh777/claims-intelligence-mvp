@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { formatDate, formatMs, formatValue } from "../../lib/format";
+import { splitFences } from "../../lib/markdown";
 import type { Answer, Component, Kpi } from "../../lib/types";
 import { Icon } from "../Icon";
 import { CodeBlock, Drawer } from "../Overlay";
@@ -273,7 +274,15 @@ export function AnswerView({
     body = (
       <>
         {answer.stale && onRerun && answer.queries.length > 0 && <StaleBanner answer={answer} onRerun={onRerun} busy={busy} />}
-        <div className={"answer-text" + (o === "unsupported" ? " answer-unsupported" : "")}>{answer.text}</div>
+        {splitFences(answer.text).map((p, i) =>
+          "code" in p ? (
+            <CodeBlock key={i} code={p.code} language={p.lang} />
+          ) : (
+            <div key={i} className={"answer-text" + (o === "unsupported" ? " answer-unsupported" : "")}>
+              {p.text}
+            </div>
+          ),
+        )}
         {answer.interpretation && <Interpretation data={answer.interpretation} />}
         <Components answer={answer} />
         {answer.limitations.length > 0 && (
