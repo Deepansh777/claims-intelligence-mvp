@@ -27,6 +27,7 @@ def pmpm_answer() -> AnswerSpec:
     return AnswerSpec(
         outcome="answered",
         text="NEXUS PMPM was {{q1.pmpm|usd2}}.",
+        narrative="",
         components=[kpi],
         assumptions=[],
         limitations=[],

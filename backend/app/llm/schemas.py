@@ -111,6 +111,9 @@ Component = Kpi | SeriesChart | HBar | Scatter | Table | Callout
 class AnswerSpec(BaseModel):
     outcome: Literal["answered", "no_results", "unsupported"]
     text: str = Field(description="1-3 sentences; figures only via {{q1.column[row]|format}}.")
+    narrative: str = Field(
+        description="2-4 sentences interpreting the result, or empty; figures only via placeholders."
+    )
     components: list[Component]
     assumptions: list[str]
     limitations: list[str]

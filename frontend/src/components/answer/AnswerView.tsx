@@ -285,6 +285,15 @@ export function AnswerView({
         )}
         {answer.interpretation && <Interpretation data={answer.interpretation} />}
         <Components answer={answer} />
+        {answer.narrative && (
+          <div className="interpret">
+            <div className="interpret-head">
+              <Icon name="sparkles" />
+              What this means
+            </div>
+            <div className="answer-text">{answer.narrative}</div>
+          </div>
+        )}
         {answer.limitations.length > 0 && (
           <div className="banner banner--warn">
             <Icon name="warn" />

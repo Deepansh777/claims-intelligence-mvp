@@ -106,6 +106,7 @@ export type Answer = {
   rerun_of: string | null;
   outcome: Outcome;
   text: string;
+  narrative?: string; // absent on answers saved before it existed
   interpretation: Record<string, string> | null;
   options: string[];
   components: Component[];

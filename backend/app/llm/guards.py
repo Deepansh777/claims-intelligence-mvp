@@ -171,11 +171,14 @@ def _component_errors(c, results, values, allowed) -> list[str]:
 def _check(spec: AnswerSpec, results, allowed: set[float], note_allowed: set[float]):
     values = _result_numbers(results)
     allowed = allowed | {float(c.top_n) for c in spec.components if isinstance(c, HBar) and c.top_n}
-    filled, text_errors = _fill(spec.text, results)
-    text_errors += [
-        f"text: number {n!r} is not in the results; use a placeholder"
-        for n in _unverified(spec.text, values, allowed)
-    ]
+    prose = {}
+    for key in ("text", "narrative"):
+        filled, errors = _fill(getattr(spec, key), results)
+        errors += [
+            f"{key}: number {n!r} is not in the results; use a placeholder"
+            for n in _unverified(getattr(spec, key), values, allowed)
+        ]
+        prose[key] = (filled, errors)
     comp_errors = [_component_errors(c, results, values, allowed) for c in spec.components]
     notes = {
         key: [
@@ -183,24 +186,34 @@ def _check(spec: AnswerSpec, results, allowed: set[float], note_allowed: set[flo
         ]
         for key in ("assumptions", "limitations")
     }
-    return filled, text_errors, comp_errors, notes
+    return prose, comp_errors, notes
 
 
 def answer_errors(
     spec: AnswerSpec, results, allowed: set[float], note_allowed: set[float]
 ) -> list[str]:
-    _, text_errors, comp_errors, notes = _check(spec, results, allowed, note_allowed)
-    errors = text_errors + [e for errs in comp_errors for e in errs]
+    prose, comp_errors, notes = _check(spec, results, allowed, note_allowed)
+    errors = [e for _, errs in prose.values() for e in errs]
+    errors += [e for errs in comp_errors for e in errs]
     for key, items in notes.items():
         errors += [f"{key}: number {n!r} is not in the results" for _, bad in items for n in bad]
     return errors
+
+
+def _auto_column(col: str, t: str) -> dict:
+    return {
+        "column": col,
+        "label": col.replace("_", " ").capitalize(),
+        "format": "number" if t in NUMERIC_TYPES else "text",
+    }
 
 
 def resolve_answer(
     spec: AnswerSpec, results, allowed: set[float], note_allowed: set[float]
 ) -> dict:
     """UI payload: invalid parts are dropped, never shown with unchecked figures."""
-    filled, text_errors, comp_errors, notes = _check(spec, results, allowed, note_allowed)
+    prose, comp_errors, notes = _check(spec, results, allowed, note_allowed)
+    (filled, text_errors), (narrative, narrative_errors) = prose["text"], prose["narrative"]
     limitations = [item for item, bad in notes["limitations"] if not bad]
     outcome = spec.outcome
     components = []
@@ -213,6 +226,12 @@ def resolve_answer(
             out["ref"] = c.value.model_dump()
         if isinstance(c, HBar) and results[c.query].row_count > MAX_HBAR_ROWS:
             out["top_n"] = min(c.top_n or MAX_HBAR_ROWS, MAX_HBAR_ROWS)
+        if isinstance(c, Table):
+            # The SQL selects only what the answer needs, so a table never hides a result column.
+            r, shown = results[c.query], {col.column for col in c.columns}
+            out["columns"] += [
+                _auto_column(col, t) for col, t in zip(r.columns, r.types) if col not in shown
+            ]
         components.append(out)
 
     if results and all(r.row_count == 0 for r in results.values()):
@@ -227,20 +246,12 @@ def resolve_answer(
         and (first := next((n for n, r in results.items() if r.row_count), None))
     ):
         r = results[first]
-        columns = [
-            {
-                "column": col,
-                "label": col.replace("_", " ").capitalize(),
-                "format": "number" if t in NUMERIC_TYPES else "text",
-            }
-            for col, t in zip(r.columns, r.types)
-        ]
         components.append(
             {
                 "type": "table",
                 "title": "Results",
                 "query": first,
-                "columns": columns,
+                "columns": [_auto_column(col, t) for col, t in zip(r.columns, r.types)],
                 "sort_column": None,
                 "sort_desc": False,
                 "filter_columns": [],
@@ -250,6 +261,7 @@ def resolve_answer(
     return {
         "outcome": outcome,
         "text": filled,
+        "narrative": "" if narrative_errors or outcome == "no_results" else narrative,
         "components": components,
         "assumptions": [item for item, bad in notes["assumptions"] if not bad],
         "limitations": limitations,

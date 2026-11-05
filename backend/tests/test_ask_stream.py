@@ -71,6 +71,7 @@ def test_answer_streams_validated_figures_and_persists_sql(http, llm):
         AnswerSpec(
             outcome="answered",
             text="NEXUS PMPM was {{q1.pmpm|usd2}}.",
+            narrative="",
             components=[kpi],
             assumptions=[],
             limitations=[],
@@ -222,6 +223,7 @@ def test_llm_schemas_are_accepted_by_openai_structured_output():
         {
             "outcome": "answered",
             "text": "t",
+            "narrative": "",
             "components": [{"type": "callout", "tone": "info", "text": "c"}],
             "assumptions": [],
             "limitations": [],

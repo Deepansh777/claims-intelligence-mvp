@@ -169,7 +169,8 @@ async def rerun(user: CurrentUser, run_id: uuid.UUID) -> dict:
         if error:
             outcome = {**_outcome(state), "text": RERUN_FAILED_TEXT}
         else:
-            state["spec"] = AnswerSpec.model_validate(run["spec"])
+            # Runs saved before the narrative field existed have none.
+            state["spec"] = AnswerSpec.model_validate({"narrative": "", **run["spec"]})
             outcome = _outcome(state)
         payload = _payload(prep, state, outcome)
         await _persist(prep, state, payload, round((time.monotonic() - t0) * 1000))
@@ -186,6 +187,7 @@ def _outcome(state: dict) -> dict:
         if plan and plan.interpretation
         else None,
         "options": [],
+        "narrative": "",
         "components": [],
         "assumptions": [],
         "limitations": [],

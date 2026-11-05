@@ -1,5 +1,15 @@
 from app.llm.guards import FALLBACK_NOTE, FALLBACK_TEXT, answer_errors, resolve_answer
-from app.llm.schemas import AnswerSpec, Callout, HBar, Kpi, QueryResult, Ref, SeriesChart
+from app.llm.schemas import (
+    AnswerSpec,
+    Callout,
+    HBar,
+    Kpi,
+    QueryResult,
+    Ref,
+    SeriesChart,
+    Table,
+    TableColumn,
+)
 
 RESULTS = {
     "q1": QueryResult(
@@ -28,10 +38,11 @@ def line(y=("pmpm",)):
     )
 
 
-def spec(text="", components=(), limitations=(), outcome="answered"):
+def spec(text="", components=(), limitations=(), outcome="answered", narrative=""):
     return AnswerSpec(
         outcome=outcome,
         text=text,
+        narrative=narrative,
         components=list(components),
         assumptions=[],
         limitations=list(limitations),
@@ -75,6 +86,15 @@ def test_invalid_components_are_reported_and_dropped():
     assert [c["type"] for c in out["components"]] == ["kpi"]
 
 
+def test_narrative_is_filled_or_dropped_alone():
+    ok = "The rise to {{q1.pmpm[last]|usd2}} may suggest higher acuity."
+    errors, out = check(spec("Results.", [kpi()], narrative=ok))
+    assert errors == [] and out["narrative"] == "The rise to $418.40 may suggest higher acuity."
+    errors, out = check(spec("Results.", [kpi()], narrative="Roughly 25% of members drove it."))
+    assert errors and "narrative" in errors[0]
+    assert out["narrative"] == "" and out["text"] == "Results."
+
+
 def test_component_text_and_notes_are_checked():
     s = spec(
         "Ok.",
@@ -96,6 +116,23 @@ def test_null_value_and_fallback_table():
         "label": "Pmpm",
         "format": "number",
     }
+
+
+def test_table_shows_every_result_column():
+    table = Table(
+        type="table",
+        title="Months",
+        query="q1",
+        columns=[TableColumn(column="month_year", label="Month", format="text")],
+        sort_column=None,
+        sort_desc=False,
+        filter_columns=[],
+    )
+    errors, out = check(spec("By month.", [table]))
+    cols = out["components"][0]["columns"]
+    assert errors == []
+    assert [c["column"] for c in cols] == ["month_year", "pmpm", "pct_change", "total_allowed"]
+    assert cols[0]["label"] == "Month" and cols[3]["label"] == "Total allowed"
 
 
 def test_no_rows_becomes_no_results():
