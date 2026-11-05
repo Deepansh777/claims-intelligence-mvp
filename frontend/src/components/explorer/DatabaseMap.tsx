@@ -9,7 +9,8 @@ type SchemaMeta = { name: string; table_count: number };
 type TableMeta = { name: string; kind: string; estimated_rows: number | null };
 type ColumnMeta = { name: string; type: string; nullable: boolean };
 type Open = { has: (key: string) => boolean; toggle: (key: string) => void };
-type Preview = (schema: string, table: string) => void;
+type TableAction = (schema: string, table: string) => void;
+type Actions = { onPreview: TableAction; onQuery: TableAction };
 
 const STALE_MS = 10 * 60_000; // matches the backend metadata cache
 const HOME = { x: 24, y: 24, k: 1 };
@@ -117,7 +118,7 @@ function Toggle({ open, onClick, children }: { open: boolean; onClick: () => voi
   );
 }
 
-function TableBranch({ schema, table, open, onPreview }: { schema: string; table: TableMeta; open: Open; onPreview: Preview }) {
+function TableBranch({ schema, table, open, actions }: { schema: string; table: TableMeta; open: Open; actions: Actions }) {
   const key = `t:${schema}.${table.name}`;
   const isOpen = open.has(key);
   const cols = useExplorer<ColumnMeta[]>(`/schemas/${enc(schema)}/tables/${enc(table.name)}/columns`, isOpen);
@@ -152,16 +153,21 @@ function TableBranch({ schema, table, open, onPreview }: { schema: string; table
             ) : (
               <Pending q={cols} />
             ))}
-          <button className="btn btn-text dm-preview" onClick={() => onPreview(schema, table.name)}>
-            Preview 5 Rows
-          </button>
+          <div className="dm-actions">
+            <button className="btn btn-text" onClick={() => actions.onPreview(schema, table.name)}>
+              Preview 5 Rows
+            </button>
+            <button className="btn btn-text" onClick={() => actions.onQuery(schema, table.name)}>
+              Query
+            </button>
+          </div>
         </div>
       }
     />
   );
 }
 
-function SchemaBranch({ schema, open, onPreview }: { schema: SchemaMeta; open: Open; onPreview: Preview }) {
+function SchemaBranch({ schema, open, actions }: { schema: SchemaMeta; open: Open; actions: Actions }) {
   const key = `s:${schema.name}`;
   const isOpen = open.has(key);
   const tables = useExplorer<TableMeta[]>(`/schemas/${enc(schema.name)}/tables`, isOpen);
@@ -178,7 +184,7 @@ function SchemaBranch({ schema, open, onPreview }: { schema: SchemaMeta; open: O
     >
       {isOpen &&
         (tables.data ? (
-          tables.data.map((t) => <TableBranch key={t.name} schema={schema.name} table={t} open={open} onPreview={onPreview} />)
+          tables.data.map((t) => <TableBranch key={t.name} schema={schema.name} table={t} open={open} actions={actions} />)
         ) : (
           <Branch node={<Pending q={tables} />} />
         ))}
@@ -240,7 +246,7 @@ function PreviewModal({ schema, table, onClose }: { schema: string; table: strin
   );
 }
 
-export function DatabaseMap() {
+export function DatabaseMap({ onQuery }: { onQuery: TableAction }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["db"]));
   const [preview, setPreview] = useState<{ schema: string; table: string } | null>(null);
   const schemas = useExplorer<SchemaMeta[]>("/schemas");
@@ -255,6 +261,7 @@ export function DatabaseMap() {
       }),
   };
   const dbOpen = expanded.has("db");
+  const actions: Actions = { onPreview: (schema, table) => setPreview({ schema, table }), onQuery };
 
   return (
     <div className="card-raised dm-card">
@@ -299,7 +306,7 @@ export function DatabaseMap() {
             {dbOpen &&
               (schemas.data ? (
                 schemas.data.map((s) => (
-                  <SchemaBranch key={s.name} schema={s} open={open} onPreview={(schema, table) => setPreview({ schema, table })} />
+                  <SchemaBranch key={s.name} schema={s} open={open} actions={actions} />
                 ))
               ) : (
                 <Branch node={<Pending q={schemas} />} />
