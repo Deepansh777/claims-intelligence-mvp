@@ -1,5 +1,6 @@
+import asyncio
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse
@@ -7,10 +8,14 @@ from fastapi.responses import JSONResponse
 from app.api.deps import CurrentUser, get_current_user
 from app.llm.schemas import QueryError, QueryResult
 from app.schemas.explorer import QueryPage, QueryRequest
-from app.services import explorer, sql_workspace
+from app.services import explorer, schema_docs, sql_workspace
 
 router = APIRouter(prefix="/explorer", dependencies=[Depends(get_current_user)])
 User = Annotated[CurrentUser, Depends(get_current_user)]
+DOC_TYPES = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+}
 
 
 def _error(status: int, detail: str, code: str) -> JSONResponse:
@@ -84,6 +89,16 @@ async def export_query(query_id: uuid.UUID, user: User):
         body,
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="query-{query_id}.csv"'},
+    )
+
+
+@router.get("/docs/schema.{fmt}")
+async def schema_document(fmt: Literal["docx", "pdf"]):
+    body = await asyncio.to_thread(schema_docs.render, fmt)
+    return Response(
+        body,
+        media_type=DOC_TYPES[fmt],
+        headers={"Content-Disposition": f'attachment; filename="claims-intelligence-schema.{fmt}"'},
     )
 
 

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Icon } from "../components/Icon";
+import { BASE_URL } from "../lib/apiClient";
 import { DatabaseMap } from "../components/explorer/DatabaseMap";
 import { SqlWorkspace } from "../components/explorer/SqlWorkspace";
 
@@ -19,6 +21,16 @@ export default function ExplorerPage() {
           <div>
             <h1 className="page-title">Data Explorer</h1>
             <p className="page-sub">Browse schemas, tables and columns, preview sample rows, and run read-only SQL.</p>
+          </div>
+          <div className="topbar-actions">
+            <a className="btn btn-secondary" href={`${BASE_URL}/explorer/docs/schema.docx`} download>
+              <Icon name="file" />
+              Schema docs (Word)
+            </a>
+            <a className="btn btn-secondary" href={`${BASE_URL}/explorer/docs/schema.pdf`} download>
+              <Icon name="download" />
+              Schema docs (PDF)
+            </a>
           </div>
         </header>
         <div className="content stack">
