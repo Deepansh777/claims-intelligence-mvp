@@ -27,12 +27,20 @@ DENIED = re.compile(
     re.IGNORECASE,
 )
 LITERALS_AND_COMMENTS = re.compile(r"'(?:[^']|'')*'|--[^\n]*|/\*.*?\*/", re.DOTALL)
+# Writes that can hide inside a SELECT/WITH: SELECT INTO, data-modifying CTEs, row locks.
+WRITES = re.compile(
+    r"\binto\b|\bupdate\s+[\w\".]+\s+set\b|\bdelete\s+from\b"
+    r"|\bfor\s+(no\s+key\s+update|update|key\s+share|share)\b",
+    re.IGNORECASE,
+)
 
 
 def validate_sql(sql: str) -> str:
     body = LITERALS_AND_COMMENTS.sub(" ", sql).strip()
     if not re.match(r"(select|with)\b", body, re.IGNORECASE):
         raise QueryError("only a single SELECT or WITH query is allowed")
+    if m := WRITES.search(body):
+        raise QueryError(f"only read-only queries are allowed: {' '.join(m.group().split())}")
     if m := DENIED.search(sql):
         raise QueryError(f"disallowed function: {m.group()}")
     return sql
@@ -48,7 +56,8 @@ def _jsonable(v: Any) -> Any:
     return str(v)
 
 
-async def run_query(sql: str, *args: Any) -> QueryResult:
+async def run_query(sql: str, *args: Any, max_rows: int = MAX_ROWS) -> QueryResult:
+    """Cancelling the awaiting task makes asyncpg cancel the statement on the server too."""
     validate_sql(sql)
     async with _slots:
         conn = await asyncpg.connect(
@@ -58,7 +67,7 @@ async def run_query(sql: str, *args: Any) -> QueryResult:
             async with conn.transaction(readonly=True):
                 await conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
                 stmt = await conn.prepare(sql)  # prepared statements reject multiple commands
-                records = await (await stmt.cursor(*args)).fetch(MAX_ROWS + 1)
+                records = await (await stmt.cursor(*args)).fetch(max_rows + 1)
                 attrs = stmt.get_attributes()
         except asyncpg.PostgresError as e:
             raise QueryError(f"{type(e).__name__}: {e}") from e
@@ -67,7 +76,7 @@ async def run_query(sql: str, *args: Any) -> QueryResult:
     return QueryResult(
         columns=[a.name for a in attrs],
         types=[a.type.name for a in attrs],
-        rows=[[_jsonable(v) for v in r] for r in records[:MAX_ROWS]],
-        row_count=min(len(records), MAX_ROWS),
-        truncated=len(records) > MAX_ROWS,
+        rows=[[_jsonable(v) for v in r] for r in records[:max_rows]],
+        row_count=min(len(records), max_rows),
+        truncated=len(records) > max_rows,
     )
