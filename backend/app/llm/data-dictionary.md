@@ -1,12 +1,12 @@
 # Claims Intelligence — Data Dictionary
 
-Reference for anyone (human or LLM agent) writing SQL against the Postgres database. Loaded by `backend/scripts/load_data.py` from `data/`. Row counts and value lists below are from the 2026-08 extract.
+Reference for anyone (human or LLM agent) writing SQL against the Postgres database. Loaded by `backend/scripts/load_data.py` from `data/`. Row counts and value lists below are from the 2026-08 extract. Code-description lookups (`ref`) are loaded by `backend/scripts/load_reference.py` from `medical-code-reference/`.
 
 ---
 
 ## 1. Rules for writing SQL
 
-1. **Two schemas.** `raw` = source extracts (claims, eligibility, providers) at line/span level. `mart` = derived tables built from raw: some are per-event (admissions, ER encounters, referral episodes), some are pre-aggregated summaries. Prefer `mart` when it already answers the question; go to `raw` only for detail mart does not have.
+1. **Three schemas.** `raw` = source extracts (claims, eligibility, providers) at line/span level. `mart` = derived tables built from raw: some are per-event (admissions, ER encounters, referral episodes), some are pre-aggregated summaries. Prefer `mart` when it already answers the question; go to `raw` only for detail mart does not have. `ref` = medical-code description lookups (§8); use them only to add descriptions, never as a data source for counts or costs.
 2. **All identifiers are lowercase snake_case.** Never quote them. `member_sk`, not `"Member_SK"`.
 3. **IDs and codes are `text`**, even when they look numeric (`member_sk`, NPI, TIN, zip, diagnosis/procedure/revenue codes, DRG). Compare with string literals: `member_sk = '536507'`.
 4. **Booleans are real booleans** (`is_icu`, `dq_*`, …): `WHERE is_icu`, not `= 'True'`.
@@ -49,8 +49,13 @@ Common joins:
 ```sql
 -- claim lines → servicing provider
 FROM raw.claims c JOIN raw.providers p ON p.provider_sk = c.servicing_provider_sk
--- NEXUS PCP roster → monthly per-PCP admissions
-FROM mart.nexus_pcp_roster r JOIN mart.admission_summary_by_pcp a ON a.member_pcp_npi = r.pcp_npi
+-- NEXUS PCP roster → monthly per-PCP admissions (aggregate locations first)
+FROM mart.nexus_pcp_roster r
+JOIN (SELECT member_pcp_npi, member_pcp_tin, month_year,
+             sum(admission_count) AS admission_count, sum(member_months) AS member_months
+      FROM mart.admission_summary_by_pcp
+      GROUP BY member_pcp_npi, member_pcp_tin, month_year) a
+  ON a.member_pcp_npi = r.pcp_npi AND a.member_pcp_tin = r.pcp_group_tin
 -- HEDIS gaps → member demographics
 FROM mart.access_hedis_measure h JOIN mart.member_info m ON m.member_sk = h.membernumber
 ```
@@ -296,7 +301,7 @@ Shared: `member_pcp_tin`, `member_pcp_groupname`, `member_pcp_npi`, `member_pcp_
 | alos | numeric | Avg length of stay. |
 | pcp_start_date / last_pcp_visit_date | date | |
 | probabilityhospitalization_next12months / _next6months, probability_icu, probabilityhospitalization_extended | numeric | Predicted probabilities, **in percent** (e.g. `0.39` = 0.39%). |
-| chronic_conditions | text | `'; '`-separated codes: AFIB, AMI, ANE (anemia), ASTMA, BP (bipolar), BPH, CA* (cancers: BRST, CR, E, LNG, PRST, URL, TRCT=cataract), CKD/CKD1–5, COPD, DB (diabetes), DEM, DP (depression), GLA, HF, HLD, HPFRAC, HTH (hypothyroid), HTN, IHD, NP, OSTP, PNE, PVD, RA, SCHZ, STRK. Filter with `chronic_conditions LIKE '%HTN%'` or `'HTN' = ANY(string_to_array(chronic_conditions, '; '))`. |
+| chronic_conditions | text | `'; '`-separated codes: AFIB, AMI, ANE (anemia), ASTMA, BP (bipolar), BPH, CA* (cancers: BRST, CR, E, LNG, PRST, URL, TRCT=cataract), CKD/CKD1–5, COPD, DB (diabetes), DEM, DP (depression), GLA, HF, HLD, HPFRAC, HTH (hypothyroid), HTN, IHD, NP, OSTP, PNE, PVD, RA, SCHZ, STRK. Filter with exact tokens: `'HTN' = ANY(string_to_array(chronic_conditions, '; '))` (`LIKE` mis-matches, e.g. `'%CKD%'` hits `CKD1`–`CKD5`). |
 | care_gaps | text | `'; '`-separated open HEDIS gap codes (BCS, CCS, CRCS, CHBP, CIS, DKE, EYE, CAP11/19/24/72, AAC20/44/64, IAC2, IAHPV, IAM, IATDAP, AICPC, AICT). |
 | admission_/er_/referral_total_allowed_amt, total_allowed_amt | numeric | Whole-period spend. |
 
@@ -413,3 +418,34 @@ Shared: `member_pcp_tin`, `member_pcp_groupname`, `member_pcp_npi`, `member_pcp_
 | memberactiveflag | text | Always `Y`. |
 | measurevalue | numeric | Result value for value-based measures (blood pressure, HbA1c); 95% null. |
 | member_pcp_sk, member_pcp_tin, member_pcp_groupname, member_pcp_npi, member_pcp_fname, member_pcp_lname | text | Attributed PCP detail (20% null). |
+
+---
+
+## 8. Schema `ref` — code description lookups
+
+Description-only lookups, one row per code (primary key), so a left join on the code never multiplies rows. All columns are `text` except booleans. Not period data: they have no dates and say nothing about coverage.
+
+| Table | Rows | Key | Columns | Version |
+|---|---|---|---|---|
+| `ref.icd10cm` | 98,403 | `code` | `is_billable` (bool; `false` = category/header), `short_description`, `description` (full), `code_set_year` | **2027** code set (from the source filename). The data covers 2024-07 → 2026-06, so codes retired before 2027 won't match and wording can differ. |
+| `ref.cpt_hcpcs` | 30,558 | `code` | `description`, `code_system` (`CPT`, `CPT Category II`, `CPT Category III`, `HCPCS Level II`), `parent_category`, `subcategory`, `active` (bool; 7,265 `false` rows still carry descriptions) | No version in the source. |
+| `ref.drg` | 778 | `drg_code` | `mdc`, `drg_type` (`M` medical / `P` procedural), `drg_description` | No version in the source. |
+
+**Code columns and how to match them.** Compare as text; never cast to numbers and never strip leading zeros.
+
+| Code system | Where it appears | Lookup |
+|---|---|---|
+| ICD-10-CM diagnosis | `raw.claims.diagnosis_cd01…10`, `admit_dx_cd`; `mart.admission_members.principal_diagnosis`; `mart.readmissions_30d.index_/readmit_principal_diagnosis`; `mart.er_encounters.principal_diagnosis`, `all_diagnosis_codes` (`;`-separated); `mart.er_revisits_30d.index_/revisit_principal_diagnosis`; `mart.referrals_episodes.governing_diagnosis_cd01` | `ref.icd10cm.code = upper(replace(btrim(x), '.', ''))`. Source codes have a dot (`F50.021`), the reference doesn't. Uppercase is needed because raw has some lowercase codes. No other normalization. |
+| CPT / HCPCS | `raw.claims.proc_code`; `mart.referrals_episodes.governing_proc_code` | `ref.cpt_hcpcs.code = upper(btrim(x))`. Codes can be alphanumeric (`0001A`, `G0008`) or start with zeros; don't cast. Some `proc_code` values are revenue codes or junk (`'0250'`, `'DUMMY'`, `'NOCPT'`) and won't match. |
+| MS-DRG | `mart.admission_members.drg_code`; `raw.claims.sub_drgcode` | `ref.drg.drg_code = x`, exact. Don't zero-pad: `admission_members.drg_code` holds 14 values like `'23'`, `'1'`, `'99231'`, `'H0010'` that the mart itself flags `dq_drg_unmatched`. |
+| ICD-10-PCS, revenue, modifier, place of service, type of bill | `surgproccode_1…5`, `rev_code`, `proc_mod1/2`, `pos`, `bill_code` | No reference loaded. Don't add descriptions. |
+
+**Descriptions already in `mart` (compared with `ref` on this extract).**
+
+| Mart column | Verdict |
+|---|---|
+| `admission_members.drg_description` | Identical to `ref.drg` for all 1,404 matched rows. Safe to reuse. |
+| `referrals_episodes.governing_proc_code_description` | Identical to `ref.cpt_hcpcs` for every matched row. Safe to reuse. |
+| ICD descriptions: `er_encounters.principal_diagnosis_description`, `all_diagnosis_descriptions`, `er_revisits_30d.*_description`, `referrals_episodes.governing_diagnosis_description` | **Not identical** (compared on the principal-diagnosis columns; `all_diagnosis_descriptions` was not compared). About 35% of ER rows, 37% of revisit rows, and many referral rows differ, mostly because the mart text drops "unspecified" (`K35.80` is `acute appendicitis` in the mart, `Unspecified acute appendicitis` in `ref`). Use `ref.icd10cm.description`. The mart's code-matching flags (`principal_diagnosis_ref_matched`, `dq_unmatched_diagnosis_codes`) agree with `ref`. |
+
+**Unmatched codes.** About 2% of ER principal diagnoses (`'31'`, `'09'`, `'D1'`, `'000.00'`) and 14 admission DRGs have no description anywhere. They are source data-quality problems, not missing rows in `ref`.
