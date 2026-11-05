@@ -200,6 +200,7 @@
 .modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(14, 37, 42, 0.45); padding: 24px; }
 .modal { width: 100%; max-width: 440px; padding: 28px; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); }
 .modal.lg { max-width: 760px; }
+.modal.wide { max-width: none; width: 90vw; }
 .modal h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 400; color: var(--brand-dark); margin-bottom: 8px; }
 .modal p { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }

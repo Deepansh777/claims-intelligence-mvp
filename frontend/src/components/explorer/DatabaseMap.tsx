@@ -14,6 +14,8 @@ type Actions = { onPreview: TableAction; onQuery: TableAction };
 
 const STALE_MS = 10 * 60_000; // matches the backend metadata cache
 const HOME = { x: 24, y: 24, k: 1 };
+const MIN_ZOOM = 0.1; // low enough for Fit to show a fully expanded schema as an overview
+const MAX_ZOOM = 2.5;
 const compact = new Intl.NumberFormat(undefined, { notation: "compact" });
 const enc = encodeURIComponent;
 
@@ -37,7 +39,7 @@ function usePanZoom() {
     const cx = px ?? r.width / 2;
     const cy = py ?? r.height / 2;
     setView((v) => {
-      const k = Math.min(2.5, Math.max(0.3, v.k * factor));
+      const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.k * factor));
       return { k, x: cx - ((cx - v.x) * k) / v.k, y: cy - ((cy - v.y) * k) / v.k };
     });
   }, []);
@@ -54,6 +56,15 @@ function usePanZoom() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
+
+  // Whole tree visible and centred; never enlarged past 100% so a small tree stays readable.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const fit = useCallback(() => {
+    const vp = ref.current!.getBoundingClientRect();
+    const { offsetWidth: w, offsetHeight: h } = canvasRef.current!; // layout size, unaffected by scale
+    const k = Math.max(MIN_ZOOM, Math.min(1, (vp.width - 48) / w, (vp.height - 48) / h));
+    setView({ k, x: (vp.width - w * k) / 2, y: Math.max(24, (vp.height - h * k) / 2) });
+  }, []);
 
   const pan = (dx: number, dy: number) => setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
   const handlers = {
@@ -79,7 +90,7 @@ function usePanZoom() {
       else if (e.key === "-") zoomAt(1 / 1.2);
     },
   };
-  return { ref, view, handlers, zoomAt, reset: () => setView(HOME) };
+  return { ref, canvasRef, view, handlers, zoomAt, fit, reset: () => setView(HOME) };
 }
 
 /** A node with its children stacked to the right; CSS draws the connectors. */
@@ -195,7 +206,7 @@ function SchemaBranch({ schema, open, actions }: { schema: SchemaMeta; open: Ope
 function PreviewModal({ schema, table, onClose }: { schema: string; table: string; onClose: () => void }) {
   const q = useExplorer<Dataset>(`/schemas/${enc(schema)}/tables/${enc(table)}/preview`);
   return (
-    <Modal onClose={onClose} large>
+    <Modal onClose={onClose} wide>
       <h2>
         {schema}.{table}
       </h2>
@@ -250,7 +261,7 @@ export function DatabaseMap({ onQuery }: { onQuery: TableAction }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["db"]));
   const [preview, setPreview] = useState<{ schema: string; table: string } | null>(null);
   const schemas = useExplorer<SchemaMeta[]>("/schemas");
-  const { ref, view, handlers, zoomAt, reset } = usePanZoom();
+  const { ref, canvasRef, view, handlers, zoomAt, fit, reset } = usePanZoom();
   const open: Open = {
     has: (k) => expanded.has(k),
     toggle: (k) =>
@@ -266,6 +277,10 @@ export function DatabaseMap({ onQuery }: { onQuery: TableAction }) {
   return (
     <div className="card-raised dm-card">
       <div className="dm-toolbar">
+        <button className="btn btn-text" onClick={fit}>
+          <Icon name="fit" />
+          Fit to screen
+        </button>
         <button className="icon-btn" onClick={() => zoomAt(1 / 1.2)} aria-label="Zoom out" title="Zoom out">
           <Icon name="minus" />
         </button>
@@ -292,7 +307,7 @@ export function DatabaseMap({ onQuery }: { onQuery: TableAction }) {
         aria-label="Database map. Use arrow keys to pan, plus and minus to zoom."
         {...handlers}
       >
-        <div className="dm-canvas" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+        <div className="dm-canvas" ref={canvasRef} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
           <Branch
             node={
               <div className="dm-node dm-db">

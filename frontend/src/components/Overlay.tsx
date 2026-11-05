@@ -11,11 +11,21 @@ function useEscape(onClose: () => void) {
   }, [onClose]);
 }
 
-export function Modal({ children, onClose, large }: { children: ReactNode; onClose: () => void; large?: boolean }) {
+export function Modal({
+  children,
+  onClose,
+  large,
+  wide,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  large?: boolean;
+  wide?: boolean;
+}) {
   useEscape(onClose);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={"modal" + (large ? " lg" : "")} role="dialog" aria-modal="true">
+      <div className={"modal" + (large ? " lg" : "") + (wide ? " wide" : "")} role="dialog" aria-modal="true">
         {children}
       </div>
     </div>
