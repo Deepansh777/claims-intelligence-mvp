@@ -1,0 +1,42 @@
+/* Additions for the live Ask tab, built from the tokens and patterns in the static stylesheets. */
+
+.answer-text { white-space: pre-line; }
+.answer-unsupported { color: #8a6d1f; }
+
+.ask-next { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ask-pill { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; }
+.ask-pill svg { width: 12px; height: 12px; }
+.ask-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+.clarify .ask-next { margin-top: 2px; }
+
+.tool-static { cursor: default; }
+.tool-static:hover { background: none; border-color: transparent; }
+
+.th-sort {
+  border: 0; background: none; padding: 0; font: inherit; color: inherit; letter-spacing: inherit;
+  text-transform: inherit; display: inline-flex; align-items: center; gap: 4px;
+}
+.th-sort:hover { color: var(--brand-dark); }
+.th-arrow { font-size: 0.6rem; min-width: 8px; color: var(--brand-accent); }
+
+.table-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.table-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--muted); }
+.table-filter select {
+  font-size: 0.8125rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--ink);
+}
+.table-footer { align-items: center; gap: 8px; }
+
+.banner > span { flex: 1; }
+.banner .link-btn { align-self: center; }
+.link-btn:disabled { opacity: 0.5; cursor: not-allowed; text-decoration: none; }
+.composer-send.is-stop { background: var(--brand-dark); }
+
+.conv-row { cursor: pointer; }
+.conv-title { font-weight: 500; color: #123137; text-decoration: none; }
+.conv-title:hover { text-decoration: underline; }
+.conv-preview {
+  font-size: 0.78rem; margin-top: 2px; max-width: 60ch;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.conv-actions { width: 1%; text-align: right; }

@@ -6,6 +6,7 @@ Full replace: every run drops and recreates each table. Usage (from backend/):
 
 import asyncio
 import csv
+import json
 import re
 import sys
 from pathlib import Path
@@ -60,7 +61,7 @@ async def create_indexes(conn: asyncpg.Connection, schema: str, table: str) -> N
         await conn.execute(f'CREATE INDEX ON {schema}."{table}" ("{column}")')
 
 
-async def load_csv(conn: asyncpg.Connection, schema: str, path: Path) -> None:
+async def load_csv(conn: asyncpg.Connection, schema: str, path: Path) -> int:
     table = table_name(path)
     with path.open(newline="", encoding="utf-8-sig") as f:
         columns = [c.strip().lower() for c in next(csv.reader(f))]
@@ -91,16 +92,30 @@ async def load_csv(conn: asyncpg.Connection, schema: str, path: Path) -> None:
 
     count = await conn.fetchval(f'SELECT count(*) FROM {schema}."{table}"')
     print(f"{schema}.{table}: {count:,} rows, {len(alters)}/{len(columns)} typed columns")
+    return count
 
 
 async def main(data_dir: Path) -> None:
     conn = await asyncpg.connect(settings.database_url.replace("+asyncpg", ""))
     try:
+        # Saved chat results are compared against this version to flag them as stale.
+        if not await conn.fetchval("SELECT to_regclass('app.dataset_versions')"):
+            sys.exit(
+                "app.dataset_versions is missing; run `alembic upgrade head` from backend/ first."
+            )
         for schema in ("raw", "mart"):
             await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+        counts = {}
         for path in sorted(data_dir.rglob("*.csv")):
             schema = "raw" if path.parent.name == RAW_DIR else "mart"
-            await load_csv(conn, schema, path)
+            counts[f"{schema}.{table_name(path)}"] = await load_csv(conn, schema, path)
+        version = await conn.fetchval(
+            "INSERT INTO app.dataset_versions (source, table_row_counts) "
+            "VALUES ($1, $2::jsonb) RETURNING id",
+            data_dir.name,
+            json.dumps(counts),
+        )
+        print(f"Recorded dataset version {version}")
     finally:
         await conn.close()
 
