@@ -1,12 +1,26 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import router as api_v1_router
 from app.core.config import settings
+from app.db.session import engine
+from app.services import retention
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await retention.fail_interrupted_answers()
+    purge = asyncio.create_task(retention.purge_forever())
+    yield
+    purge.cancel()
+    await engine.dispose()
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Claims Intelligence Platform")
+    app = FastAPI(title="Claims Intelligence Platform", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,

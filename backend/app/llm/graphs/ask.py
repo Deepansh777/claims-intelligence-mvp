@@ -32,6 +32,7 @@ SAMPLE_ROWS = 50
 class AskState(TypedDict, total=False):
     question: str
     network: str
+    context: str
     plan: SqlPlan
     sql_attempts: int
     sql_error: str | None
@@ -80,7 +81,10 @@ async def plan(state: AskState, config: RunnableConfig) -> AskState:
         if attempt == 1
         else f"Fixing the query (attempt {attempt} of {MAX_SQL_ATTEMPTS})…"
     )
-    prompt = f"Step: plan\nDefault network: {state['network']}\nQuestion: {state['question']}"
+    prompt = f"Step: plan\nDefault network: {state['network']}\n"
+    if state.get("context"):
+        prompt += f"Previous analysis context (oldest first):\n{state['context']}\n\n"
+    prompt += f"Question: {state['question']}"
     if state.get("sql_error"):
         failed = "\n\n".join(f"{q.name}:\n{q.sql}" for q in state["plan"].queries)
         prompt += f"\n\nYour previous SQL failed; fix it.\n{failed}\nError: {state['sql_error']}"
@@ -89,19 +93,20 @@ async def plan(state: AskState, config: RunnableConfig) -> AskState:
     return {"plan": result, "sql_attempts": attempt, "sql_error": None}
 
 
-async def run_sql(state: AskState, config: RunnableConfig) -> AskState:
-    run_query = config["configurable"]["run_query"]
-    queries = state["plan"].queries[:3]
-    executions, results = list(state.get("executions", [])), {}
+async def execute(
+    queries: list[PlannedQuery], run_query, attempt: int, status=lambda message: None
+) -> tuple[list[dict], dict[str, QueryResult], str | None]:
+    """Run queries in order, stopping at the first failure. Returns executions, results, error."""
+    executions, results = [], {}
     for i, q in enumerate(queries, 1):
-        _status(
+        status(
             f"Running query {i} of {len(queries)}…" if len(queries) > 1 else "Running the query…"
         )
         started = time.monotonic()
         record = {
             "name": q.name,
             "purpose": q.purpose,
-            "attempt": state["sql_attempts"],
+            "attempt": attempt,
             "sql": q.sql,
         }
         try:
@@ -111,12 +116,25 @@ async def run_sql(state: AskState, config: RunnableConfig) -> AskState:
             executions.append(
                 {**record, "status": "failed", "error": str(e), "duration_ms": ms, "result": None}
             )
-            return {"executions": executions, "sql_error": f"{q.name}: {e}"}
+            return executions, results, f"{q.name}: {e}"
         ms = round((time.monotonic() - started) * 1000)
         executions.append(
             {**record, "status": "succeeded", "error": None, "duration_ms": ms, "result": result}
         )
         results[q.name] = result
+    return executions, results, None
+
+
+async def run_sql(state: AskState, config: RunnableConfig) -> AskState:
+    new, results, error = await execute(
+        state["plan"].queries[:3],
+        config["configurable"]["run_query"],
+        state["sql_attempts"],
+        _status,
+    )
+    executions = state.get("executions", []) + new
+    if error:
+        return {"executions": executions, "sql_error": error}
     return {"executions": executions, "results": results}
 
 

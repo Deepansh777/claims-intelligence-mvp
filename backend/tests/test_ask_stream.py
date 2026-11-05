@@ -4,15 +4,12 @@ import asyncio
 import json
 import uuid
 
-import asyncpg
 import pytest
-from fastapi.testclient import TestClient
+from conftest import as_user, db
 
-from app.api.deps import CurrentUser, get_current_user
-from app.core.config import settings
+from app.api.deps import CurrentUser
 from app.llm import client as llm_client
 from app.llm.schemas import AnswerSpec, Interpretation, Kpi, PlannedQuery, Ref, SqlPlan
-from app.main import app
 from app.schemas.ask import AskRequest
 from app.services import ask_service
 
@@ -34,17 +31,6 @@ INTERPRETATION = Interpretation(
 )
 
 
-def db(sql: str, *args):
-    async def run():
-        conn = await asyncpg.connect(settings.database_url.replace("+asyncpg", ""))
-        try:
-            return await conn.fetch(sql, *args)
-        finally:
-            await conn.close()
-
-    return asyncio.run(run())
-
-
 def query_plan(sql: str) -> SqlPlan:
     return SqlPlan(
         action="query",
@@ -53,40 +39,6 @@ def query_plan(sql: str) -> SqlPlan:
         interpretation=INTERPRETATION,
         queries=[PlannedQuery(name="q1", purpose="PMPM", sql=sql)],
     )
-
-
-@pytest.fixture(scope="module")
-def http():
-    try:
-        db("SELECT 1 FROM app.conversations LIMIT 1")
-    except (OSError, asyncpg.PostgresError) as e:
-        pytest.skip(f"database unavailable: {e}")
-    with TestClient(app) as c:
-        yield c
-    db("DELETE FROM app.conversations WHERE user_id LIKE 'test-%'")
-    db("DELETE FROM llm_metrics.llm_runs WHERE user_id LIKE 'test-%'")
-    app.dependency_overrides.clear()
-
-
-def as_user() -> str:
-    user = CurrentUser(id=f"test-{uuid.uuid4().hex[:8]}", is_admin=False)
-    app.dependency_overrides[get_current_user] = lambda: user
-    return user.id
-
-
-@pytest.fixture
-def llm(monkeypatch):
-    """Queue of structured outputs the fake model returns, plus the prompts it received."""
-    queue, prompts = [], []
-
-    async def fake(schema, system, prompt, effort, config):
-        prompts.append(prompt)
-        item = queue.pop(0)
-        assert isinstance(item, schema)
-        return item
-
-    monkeypatch.setattr(llm_client, "call_structured", fake)
-    return queue, prompts
 
 
 def ask(http, question=QUESTION):
@@ -138,12 +90,13 @@ def test_answer_streams_validated_figures_and_persists_sql(http, llm):
     assert "AI Query Policy" not in r.text and "Step `plan`" not in r.text
 
     stored = db(
-        "SELECT q.sql, m.status, c.title, r.dataset_version_id FROM app.query_executions q "
+        "SELECT q.sql, m.status, r.dataset_version_id FROM app.query_executions q "
         "JOIN app.analysis_runs r ON r.id = q.run_id JOIN app.messages m ON m.id = r.message_id "
-        "JOIN app.conversations c ON c.id = m.conversation_id WHERE r.id = $1",
+        "WHERE r.id = $1",
         uuid.UUID(result["run_id"]),
     )[0]
-    assert (stored["sql"], stored["status"], stored["title"]) == (PMPM_SQL, "answered", QUESTION)
+    assert (stored["sql"], stored["status"]) == (PMPM_SQL, "answered")
+    assert http.get("/api/v1/conversations").json()[0]["title"] == QUESTION
     assert stored["dataset_version_id"] == db("SELECT max(id) FROM app.dataset_versions")[0][0]
     assert (
         db("SELECT status FROM llm_metrics.llm_runs WHERE id = $1", uuid.UUID(result["run_id"]))[0][

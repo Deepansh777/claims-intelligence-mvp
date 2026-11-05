@@ -20,3 +20,11 @@ class ConversationOut(BaseModel):
     id: uuid.UUID
     title: str
     created_at: datetime
+
+
+class ConversationSummary(ConversationOut):
+    preview: str | None
+    network: str | None
+    last_activity: datetime
+    expires_at: datetime
+    stale: bool
