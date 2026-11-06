@@ -6,6 +6,7 @@
 .dash-title { font-family: var(--font-display); font-weight: 400; font-size: 1.75rem; color: var(--brand-dark); line-height: 1.2; }
 .dash-meta { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 0.85rem; color: var(--muted); }
 .dash-meta strong { color: var(--ink); }
+.dash-period { margin-left: auto; align-self: flex-start; text-align: right; font-size: 0.9rem; font-weight: 600; color: var(--brand-dark); }
 .dash-tabs { margin-bottom: 0; }
 .dash-panel { display: flex; flex-direction: column; gap: 16px; }
 .dash-question { font-size: 0.85rem; color: var(--muted); }

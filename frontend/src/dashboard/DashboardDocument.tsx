@@ -221,8 +221,11 @@ export function DashboardDocument({ dashboard }: { dashboard: DashboardPayload }
           <div className="dash-meta">
             <span><strong>{s.provider_name}</strong> · {identity} · {s.network}</span>
             <span>{s.population}</span>
-            <span>Reporting period: {s.period}</span>
           </div>
+        </div>
+        <div className="dash-period">
+          <span className="dash-label">Reporting period</span>
+          {s.period}
         </div>
       </header>
       {dashboard.tabs.length > 1 && (
