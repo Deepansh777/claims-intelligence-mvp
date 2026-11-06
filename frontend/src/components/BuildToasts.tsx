@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ApiError, apiGet, apiSend } from "../lib/apiClient";
@@ -10,6 +10,7 @@ import { Modal } from "./Overlay";
 const POLL_MS = 1500;
 const TICK_MS = 1000;
 const ERROR_TEXT = "Something went wrong. Please try again.";
+const APP_TITLE = document.title;
 const ENDED: Record<BuildStatus, string> = { running: "", built: "Built in", failed: "Failed after", cancelled: "Cancelled after" };
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
@@ -155,15 +156,28 @@ function BuildToast({
   );
 }
 
+/** The user's running builds and undismissed outcomes, polled while any build runs. */
+export const useBuilds = () =>
+  useQuery({
+    queryKey: ["builds"],
+    queryFn: () => apiGet<DashboardBuild[]>("/dashboards/builds"),
+    refetchInterval: (q) => (q.state.data?.some((b) => b.status === "running") ? POLL_MS : false),
+    // Keep polling in a background tab so the finished build can retitle the tab and notify.
+    refetchIntervalInBackground: true,
+  });
+
+function announce(b: DashboardBuild) {
+  const text = b.status === "built" ? "Dashboard ready" : "Dashboard build failed";
+  document.title = `${text} · ${APP_TITLE}`;
+  if ("Notification" in window && Notification.permission === "granted") new Notification(text, { body: b.title });
+}
+
 /** Progress and outcome of the user's dashboard builds, on every tab. */
 export function BuildToasts() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const builds = useQuery({
-    queryKey: ["builds"],
-    queryFn: () => apiGet<DashboardBuild[]>("/dashboards/builds"),
-    refetchInterval: (q) => (q.state.data?.some((b) => b.status === "running") ? POLL_MS : false),
-  });
+  const builds = useBuilds();
+  const lastStatus = useRef(new Map<string, BuildStatus>());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<DashboardBuild | null>(null);
@@ -177,6 +191,20 @@ export function BuildToasts() {
   useEffect(() => {
     if (builtKey) qc.invalidateQueries({ queryKey: ["dashboards"] });
   }, [builtKey, qc]);
+
+  useEffect(() => {
+    for (const b of builds.data ?? []) {
+      const finished = lastStatus.current.get(b.id) === "running" && (b.status === "built" || b.status === "failed");
+      if (finished && document.hidden) announce(b);
+      lastStatus.current.set(b.id, b.status);
+    }
+  }, [builds.data]);
+
+  useEffect(() => {
+    const restore = () => !document.hidden && (document.title = APP_TITLE);
+    document.addEventListener("visibilitychange", restore);
+    return () => document.removeEventListener("visibilitychange", restore);
+  }, []);
 
   const dismiss = (b: DashboardBuild) => {
     setDismissed((s) => new Set(s).add(b.id));

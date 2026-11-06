@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiGet, apiSend } from "../lib/apiClient";
 import type { DashboardOutline, DashboardScope, DashboardSummary, Meta, OutlineResult } from "../lib/types";
+import { useBuilds } from "../components/BuildToasts";
 import { Icon } from "../components/Icon";
+import { stepLabel } from "../lib/builds";
 import { ageLabel, RetentionBadge } from "./ConversationsPage";
 
 const MAX_TABS = 3;
@@ -102,6 +104,7 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
   const days = meta?.dashboard_retention_days ?? 30;
   const effort = meta?.default_effort ?? "medium";
   const rows = list.data ?? [];
+  const building = (useBuilds().data ?? []).filter((b) => b.status === "running");
 
   const tabsReady = mode === "ai" || userTabs.every((t) => t.name.trim() && t.description.trim());
   const outlineReady = !!outline?.title.trim() && outline.tabs.every((t) => t.name.trim() && t.question.trim());
@@ -138,6 +141,7 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
     if (!outline || starting) return;
     setStarting(true);
     setBuildError(null);
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
     try {
       await apiSend("POST", "/dashboards/builds", { request, outline, effort });
       qc.invalidateQueries({ queryKey: ["builds"] });
@@ -349,7 +353,7 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                 <Icon name="warn" />
                 <span>Dashboards couldn't be loaded.</span>
               </div>
-            ) : rows.length === 0 ? (
+            ) : rows.length === 0 && building.length === 0 ? (
               <div className="state-box" style={{ margin: 24 }}>
                 <div className="state-box-title">No dashboards yet</div>
                 Dashboards you build are saved here for {days} days.
@@ -367,6 +371,21 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                     </tr>
                   </thead>
                   <tbody>
+                    {building.map((b) => (
+                      <tr key={b.id} aria-busy="true">
+                        <td>
+                          <span className="conv-title">{b.title}</span>
+                          <span className="badge badge--accent" style={{ marginLeft: 8 }}>
+                            <span className="spinner sm" />
+                            Building…
+                          </span>
+                        </td>
+                        <td>{scopeLine(b.outline.scope)}</td>
+                        <td>{b.outline.tabs.length}</td>
+                        <td>{stepLabel(b.steps_done, b.steps_total)}</td>
+                        <td>—</td>
+                      </tr>
+                    ))}
                     {rows.map((d) => {
                       const missing = d.tabs.filter((t) => t.outcome !== "answered").length;
                       return (
