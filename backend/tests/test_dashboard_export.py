@@ -115,7 +115,9 @@ def test_html_is_self_contained_and_script_safe():
     assert "</script" not in script and "<!--" not in script
     digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
     assert f"script-src 'sha256-{digest}'" in page and "connect-src 'none'" in page
-    assert not re.search(r"""(src|href)=["']?https?:|url\(\s*["']?https?:|@import""", page)
+    # The bundled CSS-in-JS runtime names "@import" as a string; only a real external one fails.
+    external = r"""(src|href)=["']?https?:|url\(\s*["']?https?:|@import\s+["']?(url\()?\s*["']?(https?:|//)"""
+    assert not re.search(external, page)
 
 
 def test_filename_is_sanitized():
