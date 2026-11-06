@@ -1,9 +1,10 @@
 """Dashboard workflow.
 
 `outline`: extract provider search terms -> look them up in the roster -> propose an outline the
-user can edit. `graph`: per tab, in parallel, plan SQL -> run it (up to 3 attempts) -> compose
-the tab -> check it (up to 2 attempts). Like Ask, nothing here touches the database: the caller
-injects `run_query` and `find_providers` through config["configurable"].
+user can edit. `graph`: per tab, in parallel, plan SQL -> run it (up to 3 attempts) -> run any
+planned Python analysis on the results -> compose the tab -> check it (up to 2 attempts). Like
+Ask, nothing here touches the database or runs code: the caller injects `run_query`,
+`run_python` and `find_providers` through config["configurable"].
 """
 
 import json
@@ -37,6 +38,7 @@ SYSTEM = (
     + DOCS
 )
 MAX_OUTLINE_ATTEMPTS = 2
+MAX_SCRIPTS = 2
 NO_PROVIDER = "Which PCP or PCP group should the dashboard cover? A name, NPI or TIN works."
 OUTLINE_FAILED = (
     "I couldn't match that request to one NEXUS PCP. Which provider (name, NPI or TIN)?"
@@ -157,7 +159,14 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         executions += new
         if not error:
             break
-    out = {"plan": plan, "executions": executions, "results": {}, "spec": None, "errors": []}
+    out = {
+        "plan": plan,
+        "executions": executions,
+        "scripts": [],
+        "results": {},
+        "spec": None,
+        "errors": [],
+    }
     allowed = tab_allowed(s["request"], s["outline"], plan)
 
     if plan.unsupported or not plan.queries:
@@ -178,6 +187,11 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
     if error:
         return {"tabs": {t.id: {**out, "errors": [error]}}}
 
+    for script in plan.analysis[:MAX_SCRIPTS]:
+        _status(f"{t.name}: running the Python analysis…", f"{t.id}:query")
+        ran = await config["configurable"]["run_python"](script.code, results)
+        out["scripts"].append({"purpose": script.purpose, "code": script.code, **ran})
+
     errors, spec = [], None
     for attempt in range(1, MAX_COMPOSE_ATTEMPTS + 1):
         _status(
@@ -190,6 +204,10 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         if plan.interpretation:
             parts.append(f"Interpretation: {plan.interpretation.model_dump_json()}")
         parts += [describe(q, results[q.name]) for q in plan.queries[:3]]
+        parts += [
+            f"Python analysis ({s['status']}): {s['purpose']}\nOutput:\n{s['output']}"
+            for s in out["scripts"]
+        ]
         if errors:
             parts.append(
                 "Your previous tab had these problems; fix all of them:\n- "

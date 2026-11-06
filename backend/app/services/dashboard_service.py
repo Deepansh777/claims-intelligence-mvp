@@ -18,7 +18,7 @@ from app.llm.usage import UsageTracker
 from app.repositories import conversations as conversation_repo
 from app.repositories import dashboards as repo
 from app.schemas.dashboards import GenerateRequest, OutlineRequest
-from app.services import dashboard_export
+from app.services import dashboard_export, python_sandbox
 from app.services.analytics_sql import run_query
 
 log = logging.getLogger(__name__)
@@ -153,6 +153,7 @@ def _version(prep: PreparedRun, tabs: dict) -> dict:
             "executions": [
                 {k: v for k, v in e.items() if k != "result"} for e in out["executions"]
             ],
+            "scripts": out.get("scripts", []),
         }
         results[t.id] = {name: r.model_dump() for name, r in out["results"].items()}
         validation[t.id] = {
@@ -202,7 +203,11 @@ async def _build(prep: PreparedRun) -> None:
     """Runs a build to its outcome. Nothing is saved unless at least one tab was built."""
     tracker = UsageTracker(prep.run_id, "dashboard", prep.user_id, prep.dashboard_id)
     config = {
-        "configurable": {"run_query": run_query, "effort": prep.effort},
+        "configurable": {
+            "run_query": run_query,
+            "run_python": python_sandbox.run_script,
+            "effort": prep.effort,
+        },
         "callbacks": [tracker],
         "recursion_limit": 25,
     }

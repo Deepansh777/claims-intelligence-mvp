@@ -7,7 +7,7 @@ import type { DashboardMethodology } from "../lib/types";
 import { Icon } from "./Icon";
 import { CodeBlock, Modal } from "./Overlay";
 
-export type DetailKind = "methodology" | "sql";
+export type DetailKind = "methodology" | "sql" | "python";
 
 /** Text-only rendering: nothing from the document reaches the page as HTML. */
 function Markdown({ text }: { text: string }) {
@@ -50,7 +50,7 @@ export function DashboardDetails({ id, title, kind, onClose }: { id: string; tit
   return (
     <Modal onClose={onClose} large>
       <div className="card-header-row">
-        <h2>{kind === "methodology" ? title : `SQL queries · ${title}`}</h2>
+        <h2>{kind === "methodology" ? title : `${kind === "sql" ? "SQL queries" : "Python scripts"} · ${title}`}</h2>
         {kind === "methodology" && q.data && (
           <button className="btn btn-secondary" onClick={() => downloadText(`${stem}-methodology.md`, q.data.markdown, "text/markdown")}>
             <Icon name="download" />
@@ -71,6 +71,28 @@ export function DashboardDetails({ id, title, kind, onClose }: { id: string; tit
           </div>
         ) : kind === "methodology" ? (
           <Markdown text={q.data!.markdown} />
+        ) : kind === "python" ? (
+          q.data!.scripts.map((s, i) => (
+            <section key={i} className="stack details-query">
+              <div className="card-header-row">
+                <div>
+                  <h3>{s.purpose}</h3>
+                  <p>
+                    {s.tab} tab: {s.status === "succeeded" ? "ran" : "failed"} in {formatMs(s.duration_ms)}.
+                  </p>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => downloadText(`${stem}-${fileStem(s.tab)}-analysis-${i + 1}.py`, s.code + "\n", "text/x-python")}
+                >
+                  <Icon name="download" />
+                  Download .py
+                </button>
+              </div>
+              <CodeBlock code={s.code} language="python" />
+              {s.output && <CodeBlock code={s.output} language="plaintext" />}
+            </section>
+          ))
         ) : q.data!.queries.length === 0 ? (
           <p>No query ran for this dashboard.</p>
         ) : (

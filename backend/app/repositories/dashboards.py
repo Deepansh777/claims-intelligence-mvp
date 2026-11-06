@@ -58,7 +58,8 @@ async def list_dashboards(db: AsyncSession, user_id: str, days: int) -> list[dic
                    (SELECT jsonb_agg(jsonb_build_object('name', t->>'name', 'outcome', t->>'outcome'))
                     FROM jsonb_array_elements(v.spec->'tabs') t) AS tabs,
                    u.attributes->>'model' AS model, b.effort,
-                   u.input_tokens, u.cached_input_tokens, u.output_tokens, u.cost_usd
+                   u.input_tokens, u.cached_input_tokens, u.output_tokens, u.cost_usd,
+                   jsonb_path_exists(v.queries, '$.*.scripts[*]') AS has_python
             FROM app.dashboards d
             JOIN app.dashboard_versions v
               ON v.dashboard_id = d.id AND v.version = d.current_version

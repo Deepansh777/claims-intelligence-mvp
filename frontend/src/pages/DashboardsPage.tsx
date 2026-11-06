@@ -454,6 +454,11 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                             <button className="icon-btn" aria-label={`SQL queries: ${d.title}`} title="SQL queries" onClick={() => setDetails({ d, kind: "sql" })}>
                               <Icon name="database" />
                             </button>
+                            {d.has_python && (
+                              <button className="icon-btn" aria-label={`Python scripts: ${d.title}`} title="Python scripts" onClick={() => setDetails({ d, kind: "python" })}>
+                                <Icon name="code" />
+                              </button>
+                            )}
                             <button className="icon-btn" aria-label={`Delete dashboard: ${d.title}`} title="Delete dashboard" onClick={() => setConfirm(d)}>
                               <Icon name="trash" />
                             </button>

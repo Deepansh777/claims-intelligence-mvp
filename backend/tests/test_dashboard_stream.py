@@ -14,6 +14,7 @@ from app.llm.dashboard_schemas import (
     Insight,
     OutlineResult,
     ProviderSearch,
+    PythonScript,
     TabOutline,
     TabPlan,
     Widget,
@@ -68,11 +69,12 @@ INTERPRETATION = Interpretation(
 )
 
 
-def plan(sql=PMPM_SQL):
+def plan(sql=PMPM_SQL, analysis=()):
     return TabPlan(
         unsupported=None,
         interpretation=INTERPRETATION,
         queries=[PlannedQuery(name="q1", purpose="PMPM vs benchmark", sql=sql)],
+        analysis=list(analysis),
     )
 
 
@@ -208,6 +210,7 @@ def test_list_usage_methodology_and_delete(http, llm):
     m = http.get(f"/api/v1/dashboards/{dashboard_id}/methodology").json()
     assert m["markdown"].startswith("# Performance overview\n")
     assert [(q["name"], q["sql"], q["row_count"]) for q in m["queries"]] == [("q1", PMPM_SQL, 1)]
+    assert m["scripts"] == [] and listed["has_python"] is False
 
     as_user()
     assert http.get(f"/api/v1/dashboards/{dashboard_id}/methodology").status_code == 404
@@ -216,6 +219,28 @@ def test_list_usage_methodology_and_delete(http, llm):
     assert http.delete(f"/api/v1/dashboards/{dashboard_id}").status_code == 204
     assert http.get("/api/v1/dashboards").json() == []
     assert http.delete(f"/api/v1/dashboards/{dashboard_id}").status_code == 404
+
+
+def test_python_analysis_runs_before_compose_and_is_kept(http, llm):
+    as_user()
+    queue, prompts = llm
+    gap = PythonScript(
+        purpose="Gap to benchmark",
+        code="r = results['q1'][0]\nprint('gap', round(r['benchmark_pmpm'] - r['provider_pmpm'], 2))",
+    )
+    queue += [plan(analysis=[gap, PythonScript(purpose="Blocked", code="import socket")]), tab()]
+    dashboard_id = generate(http)["dashboard_id"]
+    assert "Python analysis (succeeded): Gap to benchmark\nOutput:\ngap " in prompts[-1]
+    assert "Python analysis (failed): Blocked" in prompts[-1]
+
+    [listed] = http.get("/api/v1/dashboards").json()
+    m = http.get(f"/api/v1/dashboards/{dashboard_id}/methodology").json()
+    assert listed["has_python"] is True
+    assert [(s["tab"], s["purpose"], s["code"], s["status"]) for s in m["scripts"]] == [
+        ("Performance overview", "Gap to benchmark", gap.code, "succeeded"),
+        ("Performance overview", "Blocked", "import socket", "failed"),
+    ]
+    assert "- Gap to benchmark (ran)\n- Blocked (failed)" in m["markdown"]
 
 
 def test_generate_repairs_unverified_figures(http, llm):

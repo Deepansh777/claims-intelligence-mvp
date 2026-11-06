@@ -57,12 +57,20 @@ class OutlineResult(BaseModel):
     outline: DashboardOutline | None = Field(description="Required for outline; else null.")
 
 
+class PythonScript(BaseModel):
+    purpose: str = Field(description="What the analysis checks, in plain language.")
+    code: str = Field(description="Standard-library Python reading `results`; prints a summary.")
+
+
 class TabPlan(BaseModel):
     unsupported: str | None = Field(
         description="Why the data can't answer this tab, with a supported alternative; else null."
     )
     interpretation: Interpretation | None = Field(description="Null when unsupported.")
     queries: list[PlannedQuery] = Field(description="1-3 queries; empty when unsupported.")
+    analysis: list[PythonScript] = Field(
+        description="0-2 scripts run on the query results before composing; usually empty."
+    )
 
 
 class Widget(BaseModel):

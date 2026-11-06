@@ -137,11 +137,12 @@ def test_payload_embeds_only_displayed_columns():
     t = tab().model_copy(
         update={"widgets": tab().widgets + [Widget(id="overview-cats", component=bar)]}
     )
+    old_plan = plan().model_dump(exclude={"analysis"})  # saved before Python analysis existed
     version = {
         "request": "r",
         "outline": OUTLINE.model_dump(),
         "spec": DashboardSpec(title="t", tabs=[t]).model_dump(),
-        "queries": {"overview": {"plan": plan().model_dump()}},
+        "queries": {"overview": {"plan": old_plan}},
         "results": {"overview": {n: r.model_dump() for n, r in RESULTS.items()}},
         "version": 1,
         "created_at": "2026-11-05T00:00:00Z",

@@ -227,6 +227,7 @@ export type DashboardSummary = {
   cached_input_tokens: number | null;
   output_tokens: number | null;
   cost_usd: number | null;
+  has_python: boolean;
 };
 export type DashboardQuery = {
   tab: string;
@@ -236,7 +237,15 @@ export type DashboardQuery = {
   row_count: number | null;
   duration_ms: number | null;
 };
-export type DashboardMethodology = { markdown: string; queries: DashboardQuery[] };
+export type DashboardScript = {
+  tab: string;
+  purpose: string;
+  code: string;
+  status: "succeeded" | "failed";
+  output: string;
+  duration_ms: number;
+};
+export type DashboardMethodology = { markdown: string; queries: DashboardQuery[]; scripts: DashboardScript[] };
 export type BuildStatus = "running" | "built" | "failed" | "cancelled";
 export type DashboardBuild = {
   id: string;

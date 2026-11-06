@@ -83,7 +83,12 @@ def payload(v: dict) -> dict:
     tabs, datasets = [], {}
     for t in spec.tabs:
         stored = v["queries"].get(t.id) or {}
-        plan = TabPlan.model_validate(stored["plan"]) if stored.get("plan") else None
+        # Plans saved before Python analysis existed have no `analysis`.
+        plan = (
+            TabPlan.model_validate({"analysis": [], **stored["plan"]})
+            if stored.get("plan")
+            else None
+        )
         results = {n: QueryResult.model_validate(r) for n, r in v["results"].get(t.id, {}).items()}
         tab = resolve_tab(t, results, tab_allowed(v["request"], outline, plan), DOC_NUMBERS)
         kept = {w["id"] for w in tab["widgets"]}
@@ -184,10 +189,15 @@ def methodology(v: dict) -> dict:
         ),
         "",
     ]
-    queries = []
+    queries, scripts = [], []
     for tab in p["tabs"]:
         executed = _executed(v, tab)
         queries += executed
+        ran = [
+            {"tab": tab["name"], **s}
+            for s in (v["queries"].get(tab["id"]) or {}).get("scripts", [])
+        ]
+        scripts += ran
         interp = tab["methodology"]["interpretation"] or {}
         lines += [
             f"## {_md(tab['name'])}",
@@ -208,8 +218,15 @@ def methodology(v: dict) -> dict:
                 "Queries",
                 [f"{q['name']}: {q['purpose']} ({q['row_count']} rows)" for q in executed],
             ),
+            *_md_list(
+                "Python analysis",
+                [
+                    f"{s['purpose']} ({'ran' if s['status'] == 'succeeded' else 'failed'})"
+                    for s in ran
+                ],
+            ),
         ]
-    return {"markdown": "\n".join(lines).rstrip() + "\n", "queries": queries}
+    return {"markdown": "\n".join(lines).rstrip() + "\n", "queries": queries, "scripts": scripts}
 
 
 def render_html(p: dict) -> str:

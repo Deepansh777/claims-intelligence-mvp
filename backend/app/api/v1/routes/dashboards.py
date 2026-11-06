@@ -86,7 +86,7 @@ async def delete_dashboard(dashboard_id: uuid.UUID, user: User):
 
 @router.get("/{dashboard_id}/methodology")
 async def methodology(dashboard_id: uuid.UUID, user: User):
-    """The methodology as Markdown and the SQL that produced the current version."""
+    """The methodology as Markdown and the SQL and Python that produced the current version."""
     found = await dashboard_service.methodology(user, dashboard_id)
     return found if found is not None else _error(404, "Dashboard not found.", "not_found")
 

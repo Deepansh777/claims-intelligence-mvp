@@ -33,6 +33,7 @@ Write 1-3 PostgreSQL SELECT/WITH statements named `q1`-`q3` that answer the tab'
 - Risk: use existing scores only; report the scored member count. Missing scores are unknown, not low.
 - Aggregates only. No member names, addresses or dates of birth; no member-level rows unless the tab explicitly needs a follow-up list, and then `member_sk`, age and gender only.
 - `unsupported`: set it, with no queries, when the data can't answer the tab as asked; say what is missing and offer a supported alternative.
+- `analysis`: 0-2 Python scripts that run on the query results before you choose visuals and write the narrative. Add one when a query returns many categories, months or peers to compare (e.g. a clinical-drivers tab): find outliers (z-scores across categories, months or peers), which categories make up most of a difference, or how concentrated spending is. Leave it empty when the SQL result already answers the question, e.g. a single provider-vs-benchmark row. Each script reads `results`, a dict of query name to a list of row dicts (`results["q1"][0]["provider_pmpm"]`), and prints a short plain-text summary. Standard library only (`statistics`, `math`, `collections`); no files, network or subprocesses; 5 seconds of CPU.
 
 ## Step `compose` — return a DashboardTab
 
@@ -50,4 +51,5 @@ You receive the scope, the tab, the executed SQL and the results. The tab shows 
 - Figures in any text, including assumptions and limitations, only via placeholders: `{{q1.column}}`, `{{q1.column[last]}}`, `{{q1.column[3]}}`, with an optional format such as `{{q1.pmpm|usd2}}`. Years, dates and the units 12, 30, 100 and 1,000 may be written as digits. Formats: `usd`, `usd2`, `int`, `number`, `pct` (already a percentage), `pct_ratio` (a fraction), `rate`, `text`, `date`.
 - `outcome`: `answered`; `no_results` when the queries returned no rows; `unsupported` when the results can't answer the question.
 - `assumptions` and `limitations`: short items such as the benchmark definition, attributed members only, risk-score coverage.
+- Python analysis output, when present, guides which visuals and findings matter; it is not a source of figures, so state numbers only via query placeholders. When it shaped a displayed finding, describe the calculation in one `assumptions` item (e.g. "Outliers are categories more than 2 standard deviations from the mean rate").
 - If the request lists problems with your previous tab, fix all of them.
