@@ -13,6 +13,7 @@ from app.services import retention
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await retention.fail_interrupted_answers()
+    await retention.fail_interrupted_builds()
     purge = asyncio.create_task(retention.purge_forever())
     yield
     purge.cancel()

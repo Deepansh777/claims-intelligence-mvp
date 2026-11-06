@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 PURGE_EVERY_S = 3600
 BATCH = 1000
 INTERRUPTED_TEXT = "This answer was interrupted. Please ask again."
+INTERRUPTED_BUILD_TEXT = "This build was interrupted. Please try again."
 
 
 async def purge_expired() -> dict[str, int]:
@@ -29,8 +30,14 @@ async def purge_expired() -> dict[str, int]:
         dashboards = await dashboard_repo.delete_expired_dashboards(
             db, settings.dashboard_retention_days
         )
+        builds = await dashboard_repo.delete_expired_builds(db, settings.dashboard_retention_days)
         await db.commit()
-    return {"messages": messages, "conversations": conversations, "dashboards": dashboards}
+    return {
+        "messages": messages,
+        "conversations": conversations,
+        "dashboards": dashboards,
+        "builds": builds,
+    }
 
 
 async def purge_forever() -> None:
@@ -50,4 +57,14 @@ async def fail_interrupted_answers() -> None:
     """
     async with SessionLocal() as db:
         await repo.fail_running_messages(db, INTERRUPTED_TEXT)
+        await db.commit()
+
+
+async def fail_interrupted_builds() -> None:
+    """Dashboard builds still 'running' at startup died with the previous process.
+
+    shortcut: assumes one API process, like fail_interrupted_answers.
+    """
+    async with SessionLocal() as db:
+        await dashboard_repo.fail_running_builds(db, INTERRUPTED_BUILD_TEXT)
         await db.commit()

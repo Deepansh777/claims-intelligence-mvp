@@ -1,4 +1,4 @@
-"""Dashboard and dashboard-version storage (schema `app`). Queries only.
+"""Dashboard, dashboard-version and dashboard-build storage (schema `app`). Queries only.
 
 Retention: a dashboard, with all its versions, is visible while updated_at (its latest version
 or restore) is within `days` of now. Every read filters on that before the purge deletes it.
@@ -86,6 +86,118 @@ async def get_current_version(
     )
     found = row.mappings().first()
     return dict(found) if found else None
+
+
+BUILD_COLUMNS = (
+    "id, title, request, outline, effort, status, steps_done, steps_total, events, "
+    "dashboard_id, error, failed_step, created_at, finished_at, seen_at"
+)
+BUILD_VISIBLE = "user_id = :u AND created_at >= now() - make_interval(days => :days)"
+
+
+async def insert_build(db: AsyncSession, b: dict) -> None:
+    await db.execute(
+        text(
+            "INSERT INTO app.dashboard_builds (id, user_id, title, request, outline, effort, "
+            "steps_total) VALUES (:id, :user_id, :title, :request, CAST(:outline AS jsonb), "
+            ":effort, :steps_total)"
+        ),
+        {**b, "outline": json.dumps(b["outline"], default=str)},
+    )
+
+
+async def add_build_event(
+    db: AsyncSession, build_id: uuid.UUID, message: str, steps_done: int
+) -> None:
+    await db.execute(
+        text(
+            "UPDATE app.dashboard_builds SET steps_done = :n, events = events || "
+            "jsonb_build_array(jsonb_build_object('at', now(), 'message', CAST(:m AS text))) "
+            "WHERE id = :id AND status = 'running'"
+        ),
+        {"id": build_id, "m": message, "n": steps_done},
+    )
+
+
+async def finish_build(db: AsyncSession, build_id: uuid.UUID, status: str, **fields) -> bool:
+    """Running -> status. False when the build already ended (for example, was cancelled)."""
+    values = {"dashboard_id": None, "error": None, "failed_step": None, **fields}
+    row = await db.execute(
+        text(
+            "UPDATE app.dashboard_builds SET status = :s, dashboard_id = :dashboard_id, "
+            "error = :error, failed_step = :failed_step, finished_at = now() "
+            "WHERE id = :id AND status = 'running' RETURNING 1"
+        ),
+        {"id": build_id, "s": status, **values},
+    )
+    return row.first() is not None
+
+
+async def cancel_build(db: AsyncSession, build_id: uuid.UUID, user_id: str) -> bool:
+    row = await db.execute(
+        text(
+            "UPDATE app.dashboard_builds SET status = 'cancelled', finished_at = now() "
+            "WHERE id = :id AND user_id = :u AND status = 'running' RETURNING 1"
+        ),
+        {"id": build_id, "u": user_id},
+    )
+    return row.first() is not None
+
+
+async def mark_build_seen(db: AsyncSession, build_id: uuid.UUID, user_id: str) -> bool:
+    row = await db.execute(
+        text(
+            "UPDATE app.dashboard_builds SET seen_at = coalesce(seen_at, now()) "
+            "WHERE id = :id AND user_id = :u AND status <> 'running' RETURNING 1"
+        ),
+        {"id": build_id, "u": user_id},
+    )
+    return row.first() is not None
+
+
+async def list_open_builds(db: AsyncSession, user_id: str, days: int) -> list[dict]:
+    """Running builds and finished ones whose outcome the user hasn't dismissed, oldest first."""
+    rows = await db.execute(
+        text(
+            f"SELECT {BUILD_COLUMNS} FROM app.dashboard_builds WHERE {BUILD_VISIBLE} "
+            "AND (status = 'running' OR seen_at IS NULL) ORDER BY created_at"
+        ),
+        {"u": user_id, "days": days},
+    )
+    return [dict(r) for r in rows.mappings()]
+
+
+async def get_build(db: AsyncSession, build_id: uuid.UUID, user_id: str, days: int) -> dict | None:
+    row = await db.execute(
+        text(
+            f"SELECT {BUILD_COLUMNS} FROM app.dashboard_builds WHERE id = :id AND {BUILD_VISIBLE}"
+        ),
+        {"id": build_id, "u": user_id, "days": days},
+    )
+    found = row.mappings().first()
+    return dict(found) if found else None
+
+
+async def fail_running_builds(db: AsyncSession, error: str) -> int:
+    result = await db.execute(
+        text(
+            "UPDATE app.dashboard_builds SET status = 'failed', error = :e, finished_at = now(), "
+            "failed_step = events->-1->>'message' WHERE status = 'running'"
+        ),
+        {"e": error},
+    )
+    return result.rowcount
+
+
+async def delete_expired_builds(db: AsyncSession, days: int) -> int:
+    result = await db.execute(
+        text(
+            "DELETE FROM app.dashboard_builds "
+            "WHERE created_at < now() - make_interval(days => :days)"
+        ),
+        {"days": days},
+    )
+    return result.rowcount
 
 
 async def delete_expired_dashboards(db: AsyncSession, days: int) -> int:
