@@ -69,7 +69,7 @@ def _ms(t0: float) -> int:
 
 class UsageTracker(AsyncCallbackHandler):
     def __init__(
-        self, request_id: uuid.UUID, feature: str, user_id: str, conversation_id: uuid.UUID
+        self, request_id: uuid.UUID, feature: str, user_id: str, conversation_id: uuid.UUID | None
     ):
         self.request_id, self.feature = request_id, feature
         self.user_id, self.conversation_id = user_id, conversation_id

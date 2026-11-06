@@ -33,6 +33,7 @@ def http():
     with TestClient(app) as c:
         yield c
     db("DELETE FROM app.conversations WHERE user_id LIKE 'test-%'")
+    db("DELETE FROM app.dashboards WHERE user_id LIKE 'test-%'")
     db("DELETE FROM llm_metrics.llm_runs WHERE user_id LIKE 'test-%'")
     app.dependency_overrides.clear()
 

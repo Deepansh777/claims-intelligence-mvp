@@ -2,7 +2,7 @@
 
 Each tab reuses the Ask query and component types and has its own q1-q3 result namespace, so
 the Ask guards check a tab exactly like an answer. Counts and uniqueness that strict structured
-output can't express are checked by `structure_errors`.
+output can't express are checked here.
 """
 
 from typing import Literal
@@ -12,6 +12,15 @@ from pydantic import BaseModel, Field
 from app.llm.schemas import Component, Interpretation, PlannedQuery
 
 MAX_TABS = 3
+
+
+class ProviderSearch(BaseModel):
+    action: Literal["search", "clarify", "decline"]
+    message: str | None = Field(description="Question (clarify) or polite decline; else null.")
+    options: list[str] = Field(description="2-4 short clickable answers for clarify; else empty.")
+    terms: list[str] = Field(
+        description="For search: provider or group names, NPIs or TINs from the request."
+    )
 
 
 class DashboardScope(BaseModel):
@@ -25,7 +34,7 @@ class DashboardScope(BaseModel):
 
 
 class TabOutline(BaseModel):
-    id: str = Field(description="Short stable slug, e.g. 'overview'.")
+    id: str = Field(description="Short lowercase slug, e.g. 'overview'.")
     name: str
     question: str = Field(description="The business question this tab answers.")
     metrics: list[str]
@@ -34,17 +43,28 @@ class TabOutline(BaseModel):
 
 class DashboardOutline(BaseModel):
     title: str
+    filename: str = Field(description="Descriptive kebab-case name without member identifiers.")
     scope: DashboardScope
     tabs: list[TabOutline] = Field(description="1-3 tabs.")
 
 
+class OutlineResult(BaseModel):
+    action: Literal["outline", "clarify", "decline"]
+    message: str | None = Field(description="Question (clarify) or polite decline; else null.")
+    options: list[str] = Field(description="2-4 short clickable answers for clarify; else empty.")
+    outline: DashboardOutline | None = Field(description="Required for outline; else null.")
+
+
 class TabPlan(BaseModel):
-    interpretation: Interpretation
-    queries: list[PlannedQuery] = Field(description="1-3 queries.")
+    unsupported: str | None = Field(
+        description="Why the data can't answer this tab, with a supported alternative; else null."
+    )
+    interpretation: Interpretation | None = Field(description="Null when unsupported.")
+    queries: list[PlannedQuery] = Field(description="1-3 queries; empty when unsupported.")
 
 
 class Widget(BaseModel):
-    id: str = Field(description="Stable slug, unique in the dashboard; keep it across edits.")
+    id: str = Field(description="'<tab id>-<slug>', unique in the dashboard; keep it across edits.")
     component: Component
 
 
@@ -71,28 +91,41 @@ class DashboardTab(BaseModel):
 
 class DashboardSpec(BaseModel):
     title: str
-    filename: str = Field(description="Descriptive kebab-case name without member identifiers.")
-    tabs: list[DashboardTab] = Field(description="One per outline tab, in outline order.")
+    tabs: list[DashboardTab]
 
 
-def structure_errors(outline: DashboardOutline, spec: DashboardSpec) -> list[str]:
+def outline_errors(outline: DashboardOutline) -> list[str]:
     errors = []
     if not 1 <= len(outline.tabs) <= MAX_TABS:
         errors.append(f"outline: needs 1-{MAX_TABS} tabs")
-    outline_ids = [t.id for t in outline.tabs]
-    if len(set(outline_ids)) != len(outline_ids):
+    ids = [t.id for t in outline.tabs]
+    if len(set(ids)) != len(ids):
         errors.append("outline: tab ids must be unique")
+    return errors
+
+
+def tab_structure_errors(tab: DashboardTab, tab_id: str) -> list[str]:
+    errors = [] if tab.id == tab_id else [f"tab id must be {tab_id!r}"]
+    ids = [w.id for w in tab.widgets]
+    errors += [
+        f"widget id {i!r} must start with '{tab_id}-'"
+        for i in ids
+        if not i.startswith(f"{tab_id}-")
+    ]
+    if len(set(ids)) != len(ids):
+        errors.append("widget ids must be unique")
+    for f in tab.findings:
+        if not f.evidence:
+            errors.append("a finding cites no widget")
+        errors += [f"finding cites unknown widget {i!r}" for i in f.evidence if i not in ids]
+    return errors
+
+
+def structure_errors(outline: DashboardOutline, spec: DashboardSpec) -> list[str]:
+    errors = outline_errors(outline)
+    outline_ids = [t.id for t in outline.tabs]
     if [t.id for t in spec.tabs] != outline_ids:
         errors.append(f"tabs must match the outline tab ids in order: {outline_ids}")
-    widget_ids = [w.id for t in spec.tabs for w in t.widgets]
-    if dupes := sorted({i for i in widget_ids if widget_ids.count(i) > 1}):
-        errors.append(f"widget ids must be unique: {dupes}")
     for t in spec.tabs:
-        own = {w.id for w in t.widgets}
-        for f in t.findings:
-            if not f.evidence:
-                errors.append(f"{t.id}: a finding cites no widget")
-            errors += [
-                f"{t.id}: finding cites unknown widget {i!r}" for i in f.evidence if i not in own
-            ]
+        errors += [f"{t.id}: {e}" for e in tab_structure_errors(t, t.id)]
     return errors

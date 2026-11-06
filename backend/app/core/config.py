@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Read-only login role for LLM-generated SQL; created by the Alembic migration.
     analytics_database_url: str
     chat_retention_days: int = 15
+    dashboard_retention_days: int = 30
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-6.1-sol"
     openai_timeout_seconds: int = 120

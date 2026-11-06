@@ -23,7 +23,7 @@ SCOPE = DashboardScope(
 
 def outline(*ids):
     tabs = [TabOutline(id=i, name=i, question="?", metrics=[], visuals=[]) for i in ids]
-    return DashboardOutline(title="t", scope=SCOPE, tabs=tabs)
+    return DashboardOutline(title="t", filename="t", scope=SCOPE, tabs=tabs)
 
 
 def widget(wid):
@@ -57,11 +57,14 @@ def tab(tid, widgets=(), evidence=None):
 
 
 def spec(*tabs):
-    return DashboardSpec(title="t", filename="t", tabs=list(tabs))
+    return DashboardSpec(title="t", tabs=list(tabs))
 
 
 def test_valid_dashboard_has_no_errors():
-    s = spec(tab("overview", ["kpi1", "trend"], evidence=["trend"]), tab("drivers", ["cats"]))
+    s = spec(
+        tab("overview", ["overview-kpi", "overview-trend"], evidence=["overview-trend"]),
+        tab("drivers", ["drivers-cats"]),
+    )
     assert structure_errors(outline("overview", "drivers"), s) == []
 
 
@@ -80,14 +83,17 @@ def test_tabs_must_match_outline_order_and_be_unique():
     )
 
 
-def test_widget_ids_unique_across_tabs():
-    s = spec(tab("a", ["kpi"]), tab("b", ["kpi"]))
-    assert structure_errors(outline("a", "b"), s) == ["widget ids must be unique: ['kpi']"]
+def test_widget_ids_are_prefixed_by_tab_and_unique():
+    s = spec(tab("a", ["a-kpi", "a-kpi"]), tab("b", ["kpi"]))
+    assert structure_errors(outline("a", "b"), s) == [
+        "a: widget ids must be unique",
+        "b: widget id 'kpi' must start with 'b-'",
+    ]
 
 
 def test_findings_must_cite_their_own_tab_widgets():
-    s = spec(tab("a", ["x"], evidence=["y"]), tab("b", ["y"], evidence=[]))
+    s = spec(tab("a", ["a-x"], evidence=["b-y"]), tab("b", ["b-y"], evidence=[]))
     assert structure_errors(outline("a", "b"), s) == [
-        "a: finding cites unknown widget 'y'",
+        "a: finding cites unknown widget 'b-y'",
         "b: a finding cites no widget",
     ]

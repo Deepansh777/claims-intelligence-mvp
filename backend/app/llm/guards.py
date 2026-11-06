@@ -200,6 +200,41 @@ def answer_errors(
     return errors
 
 
+FINDING_TEXTS = ("finding", "clinical_context", "review_opportunity", "limitation")
+
+
+def tab_errors(tab, results, allowed: set[float], note_allowed: set[float]) -> list[str]:
+    """Same rules as answer_errors, for a dashboard tab's takeaway, findings and widgets."""
+    values = _result_numbers(results)
+    allowed = allowed | {
+        float(w.component.top_n)
+        for w in tab.widgets
+        if isinstance(w.component, HBar) and w.component.top_n
+    }
+    prose = [("takeaway", tab.takeaway)] + [
+        (f"finding {i} {key}", getattr(f, key))
+        for i, f in enumerate(tab.findings, 1)
+        for key in FINDING_TEXTS
+    ]
+    errors = []
+    for key, text in prose:
+        errors += [f"{key}: {e}" for e in _fill(text, results)[1]]
+        errors += [
+            f"{key}: number {n!r} is not in the results; use a placeholder"
+            for n in _unverified(text, values, allowed)
+        ]
+    for w in tab.widgets:
+        errors += [f"{w.id}: {e}" for e in _component_errors(w.component, results, values, allowed)]
+    for key in ("assumptions", "limitations"):
+        for item in getattr(tab, key):
+            errors += [f"{key}: {e}" for e in _fill(item, results)[1]]
+            errors += [
+                f"{key}: number {n!r} is not in the results"
+                for n in _unverified(item, values, allowed | note_allowed)
+            ]
+    return errors
+
+
 def _auto_column(col: str, t: str) -> dict:
     return {
         "column": col,

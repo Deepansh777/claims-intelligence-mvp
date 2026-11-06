@@ -1,4 +1,5 @@
-"""Chat retention (CHAT_RETENTION_DAYS): physically delete what reads already hide."""
+"""Chat and dashboard retention (CHAT_RETENTION_DAYS, DASHBOARD_RETENTION_DAYS): physically
+delete what reads already hide."""
 
 import asyncio
 import logging
@@ -6,6 +7,7 @@ import logging
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.repositories import conversations as repo
+from app.repositories import dashboards as dashboard_repo
 
 log = logging.getLogger(__name__)
 PURGE_EVERY_S = 3600
@@ -24,8 +26,11 @@ async def purge_expired() -> dict[str, int]:
             break
     async with SessionLocal() as db:
         conversations = await repo.delete_expired_empty_conversations(db, days)
+        dashboards = await dashboard_repo.delete_expired_dashboards(
+            db, settings.dashboard_retention_days
+        )
         await db.commit()
-    return {"messages": messages, "conversations": conversations}
+    return {"messages": messages, "conversations": conversations, "dashboards": dashboards}
 
 
 async def purge_forever() -> None:
