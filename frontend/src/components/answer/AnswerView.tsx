@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { formatDate, formatMs, formatValue } from "../../lib/format";
+import { formatDate, formatMs } from "../../lib/format";
 import { splitFences } from "../../lib/markdown";
 import type { Answer, Component, Kpi } from "../../lib/types";
 import { Icon } from "../Icon";
 import { CodeBlock, Drawer } from "../Overlay";
 import { HBarView, ScatterView, SeriesChartView } from "./Charts";
 import { DataTable } from "./DataTable";
+import { KpiGrid } from "./KpiGrid";
 
 const INTERPRETATION_LABELS: Record<string, string> = {
   metric: "Metric",
@@ -17,30 +18,6 @@ const INTERPRETATION_LABELS: Record<string, string> = {
   denominator: "Denominator",
   sources: "Sources",
 };
-
-const kpiIcon = (k: Kpi) =>
-  k.format === "usd" || k.format === "usd2" ? "spending" : k.format.startsWith("pct") || k.format === "rate" ? "er" : "cohort";
-
-function KpiGrid({ kpis }: { kpis: Kpi[] }) {
-  return (
-    <div className="kpi-grid">
-      {kpis.map((k, i) => (
-        <div className="card-raised kpi-card" key={i}>
-          <div className="kpi-body">
-            <div className="kpi-header">
-              <span className="kpi-icon">
-                <Icon name={kpiIcon(k)} />
-              </span>
-              <span className="kpi-title">{k.label}</span>
-            </div>
-            <div className="kpi-value">{formatValue(k.value, k.format)}</div>
-            <div className="kpi-subtitle">{k.sub ?? ""}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function Interpretation({ data }: { data: Record<string, string> }) {
   return (

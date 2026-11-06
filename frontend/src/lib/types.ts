@@ -144,6 +144,48 @@ export type ConversationSummary = {
 
 export type Conversation = ConversationSummary & { messages: Message[] };
 
+// Mirrors backend/app/services/dashboard_export.py payload().
+export type DashboardWidget = { id: string; component: Component };
+export type DashboardFinding = {
+  finding: string;
+  evidence: string[];
+  clinical_context: string;
+  review_opportunity: string;
+  limitation: string;
+};
+export type DashboardTab = {
+  id: string;
+  name: string;
+  question: string;
+  outcome: "answered" | "no_results" | "unsupported";
+  takeaway: string;
+  findings: DashboardFinding[];
+  widgets: DashboardWidget[];
+  assumptions: string[];
+  limitations: string[];
+  methodology: {
+    interpretation: Record<string, string> | null;
+    queries: { name: string; purpose: string; sql: string }[];
+  };
+};
+export type DashboardPayload = {
+  title: string;
+  scope: {
+    level: "pcp" | "pcp_group";
+    provider_name: string;
+    provider_npi: string | null;
+    provider_tin: string;
+    network: string;
+    population: string;
+    period: string;
+  };
+  version: number;
+  generated_at: string;
+  dataset_loaded_at: string | null;
+  tabs: DashboardTab[];
+  datasets: Record<string, Record<string, Dataset>>;
+};
+
 export type Meta = {
   dataset_version: { id: number; created_at: string } | null;
   retention_days: number;

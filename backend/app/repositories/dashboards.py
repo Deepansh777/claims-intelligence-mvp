@@ -57,10 +57,11 @@ async def get_current_version(
         text(f"""
             SELECT d.id AS dashboard_id, d.title, d.current_version, d.updated_at, v.version,
                    v.request, v.outline, v.queries, v.results, v.spec, v.validation,
-                   v.dataset_version_id, v.created_at
+                   v.dataset_version_id, v.created_at, dv.created_at AS dataset_loaded_at
             FROM app.dashboards d
             JOIN app.dashboard_versions v
               ON v.dashboard_id = d.id AND v.version = d.current_version
+            LEFT JOIN app.dataset_versions dv ON dv.id = v.dataset_version_id
             WHERE d.id = :id AND d.user_id = :u AND {VISIBLE}
         """),
         {"id": dashboard_id, "u": user_id, "days": days},

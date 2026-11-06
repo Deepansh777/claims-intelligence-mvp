@@ -201,38 +201,97 @@ def answer_errors(
 
 
 FINDING_TEXTS = ("finding", "clinical_context", "review_opportunity", "limitation")
+WIDGET_TEXTS = ("text", "label", "sub", "title")
+USE_PLACEHOLDER = "; use a placeholder"
 
 
-def tab_errors(tab, results, allowed: set[float], note_allowed: set[float]) -> list[str]:
-    """Same rules as answer_errors, for a dashboard tab's takeaway, findings and widgets."""
+def _prose(text: str, results, values, allowed, hint: str = "") -> tuple[str, list[str]]:
+    filled, errors = _fill(text, results)
+    errors += [
+        f"number {n!r} is not in the results{hint}" for n in _unverified(text, values, allowed)
+    ]
+    return filled, errors
+
+
+def _check_tab(tab, results, allowed: set[float], note_allowed: set[float]):
+    """Filled text and errors for every part of a dashboard tab; widget text may hold placeholders."""
     values = _result_numbers(results)
     allowed = allowed | {
         float(w.component.top_n)
         for w in tab.widgets
         if isinstance(w.component, HBar) and w.component.top_n
     }
-    prose = [("takeaway", tab.takeaway)] + [
-        (f"finding {i} {key}", getattr(f, key))
-        for i, f in enumerate(tab.findings, 1)
-        for key in FINDING_TEXTS
+    takeaway = _prose(tab.takeaway, results, values, allowed, USE_PLACEHOLDER)
+    findings = [
+        {k: _prose(getattr(f, k), results, values, allowed, USE_PLACEHOLDER) for k in FINDING_TEXTS}
+        for f in tab.findings
     ]
-    errors = []
-    for key, text in prose:
-        errors += [f"{key}: {e}" for e in _fill(text, results)[1]]
-        errors += [
-            f"{key}: number {n!r} is not in the results; use a placeholder"
-            for n in _unverified(text, values, allowed)
-        ]
+    widgets = []
     for w in tab.widgets:
-        errors += [f"{w.id}: {e}" for e in _component_errors(w.component, results, values, allowed)]
-    for key in ("assumptions", "limitations"):
-        for item in getattr(tab, key):
-            errors += [f"{key}: {e}" for e in _fill(item, results)[1]]
-            errors += [
-                f"{key}: number {n!r} is not in the results"
-                for n in _unverified(item, values, allowed | note_allowed)
-            ]
+        errors, texts = _component_errors(w.component, results, values, allowed), {}
+        for k in WIDGET_TEXTS:
+            if isinstance(text := getattr(w.component, k, None), str):
+                texts[k], fill_errors = _fill(text, results)
+                errors += fill_errors
+        widgets.append((texts, errors))
+    notes = {
+        key: [_prose(item, results, values, allowed | note_allowed) for item in getattr(tab, key)]
+        for key in ("assumptions", "limitations")
+    }
+    return takeaway, findings, widgets, notes
+
+
+def tab_errors(tab, results, allowed: set[float], note_allowed: set[float]) -> list[str]:
+    """Same rules as answer_errors, for a dashboard tab's takeaway, findings and widgets."""
+    takeaway, findings, widgets, notes = _check_tab(tab, results, allowed, note_allowed)
+    errors = [f"takeaway: {e}" for e in takeaway[1]]
+    for i, f in enumerate(findings, 1):
+        errors += [f"finding {i} {k}: {e}" for k, (_, errs) in f.items() for e in errs]
+    for w, (_, errs) in zip(tab.widgets, widgets):
+        errors += [f"{w.id}: {e}" for e in errs]
+    for key, items in notes.items():
+        errors += [f"{key}: {e}" for _, errs in items for e in errs]
     return errors
+
+
+def resolve_tab(tab, results, allowed: set[float], note_allowed: set[float]) -> dict:
+    """Display payload for a tab: placeholders filled; parts that fail the checks are dropped."""
+    takeaway, findings, widgets, notes = _check_tab(tab, results, allowed, note_allowed)
+    kept = []
+    for w, (texts, errs) in zip(tab.widgets, widgets):
+        if not errs:
+            kept.append(
+                {"id": w.id, "component": {**_resolve_component(w.component, results), **texts}}
+            )
+    kept_ids = {w["id"] for w in kept}
+    out_findings = []
+    for f, checked in zip(tab.findings, findings):
+        evidence = [i for i in f.evidence if i in kept_ids]
+        if checked["finding"][1] or not evidence:
+            continue
+        out_findings.append(
+            {k: "" if errs else filled for k, (filled, errs) in checked.items()}
+            | {"evidence": evidence}
+        )
+    limitations = [filled for filled, errs in notes["limitations"] if not errs]
+    text, errs = takeaway
+    if errs:
+        text = FALLBACK_TEXT
+        limitations.append(FALLBACK_NOTE)
+    outcome = tab.outcome
+    if results and all(r.row_count == 0 for r in results.values()):
+        outcome = "no_results"
+        kept = [w for w in kept if w["component"]["type"] == "callout"]
+    return {
+        "id": tab.id,
+        "name": tab.name,
+        "outcome": outcome,
+        "takeaway": text,
+        "findings": out_findings,
+        "widgets": kept,
+        "assumptions": [filled for filled, errs in notes["assumptions"] if not errs],
+        "limitations": limitations,
+    }
 
 
 def _auto_column(col: str, t: str) -> dict:
@@ -241,6 +300,22 @@ def _auto_column(col: str, t: str) -> dict:
         "label": col.replace("_", " ").capitalize(),
         "format": "number" if t in NUMERIC_TYPES else "text",
     }
+
+
+def _resolve_component(c, results) -> dict:
+    out = c.model_dump()
+    if isinstance(c, Kpi):
+        out["value"] = _lookup(results, c.value.query, c.value.column, c.value.row)[0]
+        out["ref"] = c.value.model_dump()
+    if isinstance(c, HBar) and results[c.query].row_count > MAX_HBAR_ROWS:
+        out["top_n"] = min(c.top_n or MAX_HBAR_ROWS, MAX_HBAR_ROWS)
+    if isinstance(c, Table):
+        # The SQL selects only what the answer needs, so a table never hides a result column.
+        r, shown = results[c.query], {col.column for col in c.columns}
+        out["columns"] += [
+            _auto_column(col, t) for col, t in zip(r.columns, r.types) if col not in shown
+        ]
+    return out
 
 
 def resolve_answer(
@@ -255,19 +330,7 @@ def resolve_answer(
     for c, errs in zip(spec.components, comp_errors):
         if errs:
             continue
-        out = c.model_dump()
-        if isinstance(c, Kpi):
-            out["value"] = _lookup(results, c.value.query, c.value.column, c.value.row)[0]
-            out["ref"] = c.value.model_dump()
-        if isinstance(c, HBar) and results[c.query].row_count > MAX_HBAR_ROWS:
-            out["top_n"] = min(c.top_n or MAX_HBAR_ROWS, MAX_HBAR_ROWS)
-        if isinstance(c, Table):
-            # The SQL selects only what the answer needs, so a table never hides a result column.
-            r, shown = results[c.query], {col.column for col in c.columns}
-            out["columns"] += [
-                _auto_column(col, t) for col, t in zip(r.columns, r.types) if col not in shown
-            ]
-        components.append(out)
+        components.append(_resolve_component(c, results))
 
     if results and all(r.row_count == 0 for r in results.values()):
         outcome = "no_results"

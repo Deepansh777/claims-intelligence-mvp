@@ -2,11 +2,11 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from app.api.deps import CurrentUser, get_current_user
 from app.schemas.dashboards import GenerateRequest, OutlineRequest
-from app.services import dashboard_service
+from app.services import dashboard_export, dashboard_service
 
 router = APIRouter(prefix="/dashboards")
 User = Annotated[CurrentUser, Depends(get_current_user)]
@@ -46,3 +46,19 @@ async def generate(body: GenerateRequest, user: User):
 async def get_dashboard(dashboard_id: uuid.UUID, user: User):
     found = await dashboard_service.get_dashboard(user, dashboard_id)
     return found if found is not None else _error(404, "Dashboard not found.", "not_found")
+
+
+@router.get("/{dashboard_id}/dashboard.html")
+async def export_html(dashboard_id: uuid.UUID, user: User, download: bool = False):
+    found = await dashboard_service.export_html(user, dashboard_id)
+    if found is None:
+        return _error(404, "Dashboard not found.", "not_found")
+    name, body = found
+    headers = {
+        "Content-Security-Policy": dashboard_export.response_csp(),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+    }
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    return HTMLResponse(body, headers=headers)

@@ -20,6 +20,7 @@ from app.llm.usage import UsageTracker
 from app.repositories import conversations as conversation_repo
 from app.repositories import dashboards as repo
 from app.schemas.dashboards import GenerateRequest, OutlineRequest
+from app.services import dashboard_export
 from app.services.analytics_sql import run_query
 
 log = logging.getLogger(__name__)
@@ -234,3 +235,12 @@ async def get_dashboard(user: CurrentUser, dashboard_id: uuid.UUID) -> dict | No
         return await repo.get_current_version(
             db, dashboard_id, user.id, settings.dashboard_retention_days
         )
+
+
+async def export_html(user: CurrentUser, dashboard_id: uuid.UUID) -> tuple[str, str] | None:
+    """(filename, HTML) of the current version, the same file for viewing and download."""
+    v = await get_dashboard(user, dashboard_id)
+    if v is None:
+        return None
+    p = dashboard_export.payload(v)
+    return dashboard_export.filename(v["outline"]["filename"]), dashboard_export.render_html(p)

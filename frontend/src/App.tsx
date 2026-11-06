@@ -7,6 +7,7 @@ import type { Meta } from "./lib/types";
 import { Icon } from "./components/Icon";
 import AskPage from "./pages/AskPage";
 import ConversationsPage from "./pages/ConversationsPage";
+import DashboardViewPage from "./pages/DashboardViewPage";
 import ExplorerPage from "./pages/ExplorerPage";
 import logoUrl from "./assets/logo.png";
 
@@ -93,6 +94,7 @@ export default function App() {
           <Route path="/ask/:conversationId?" element={<AskPage meta={meta.data} />} />
           <Route path="/conversations" element={<ConversationsPage meta={meta.data} />} />
           <Route path="/explorer" element={<ExplorerPage />} />
+          <Route path="/dashboards/:dashboardId/view" element={<DashboardViewPage />} />
           <Route path="*" element={<Navigate to="/ask" replace />} />
         </Routes>
       </main>

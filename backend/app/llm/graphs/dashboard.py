@@ -111,6 +111,14 @@ class TabState(TypedDict):
     tab: TabOutline
 
 
+def tab_allowed(request: str, outline: DashboardOutline, plan: TabPlan | None) -> set[float]:
+    """Numbers a tab may state outright: those the user wrote or the outline/interpretation hold."""
+    text = request + outline.model_dump_json()
+    if plan and plan.interpretation:
+        text += plan.interpretation.model_dump_json()
+    return numbers_in(text)
+
+
 def _status(message: str) -> None:
     get_stream_writer()({"public": True, "message": message})
 
@@ -124,7 +132,6 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         f"Dashboard request: {s['request']}"
         + (f"\nOther tabs cover (leave their topics to them):{others}" if others else "")
     )
-    allowed = numbers_in(s["request"] + s["outline"].model_dump_json())
     executions, results, error, plan = [], {}, None, None
     for attempt in range(1, MAX_SQL_ATTEMPTS + 1):
         _status(
@@ -149,6 +156,7 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         if not error:
             break
     out = {"plan": plan, "executions": executions, "results": {}, "spec": None, "errors": []}
+    allowed = tab_allowed(s["request"], s["outline"], plan)
 
     if plan.unsupported or not plan.queries:
         spec = DashboardTab(
@@ -167,8 +175,6 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
     if error:
         return {"tabs": {t.id: {**out, "errors": [error]}}}
 
-    if plan.interpretation:
-        allowed |= numbers_in(plan.interpretation.model_dump_json())
     errors, spec = [], None
     for attempt in range(1, MAX_COMPOSE_ATTEMPTS + 1):
         _status(

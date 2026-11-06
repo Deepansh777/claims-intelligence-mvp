@@ -15,7 +15,8 @@ function compare(a: unknown, b: unknown): number {
 }
 
 /** Sorting, filtering and paging all run on the rows already loaded; nothing is re-queried. */
-export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; runId: string }) {
+/** Without runId (offline dashboards) there is no API to export from, so no export link. */
+export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; runId?: string }) {
   const cols = spec.columns
     .map((c) => ({ ...c, i: data.columns.indexOf(c.column) }))
     .filter((c) => c.i >= 0);
@@ -139,10 +140,12 @@ export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; r
           </button>
         )}
         <span className="spacer" />
-        <a className="btn btn-secondary" href={`${BASE_URL}/runs/${runId}/export.csv?query=${spec.query}`} download>
-          <Icon name="download" />
-          Export Data
-        </a>
+        {runId && (
+          <a className="btn btn-secondary" href={`${BASE_URL}/runs/${runId}/export.csv?query=${spec.query}`} download>
+            <Icon name="download" />
+            Export Data
+          </a>
+        )}
       </div>
     </div>
   );

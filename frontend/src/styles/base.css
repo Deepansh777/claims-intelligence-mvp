@@ -165,3 +165,8 @@
   .content { padding: 18px 20px 32px; }
   .status-banner { padding: 10px 20px; }
 }
+
+/* ---- Dashboard viewer page (the dashboard itself renders inside the sandboxed iframe) ---- */
+.dash-view { flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.dash-view-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 0.85rem; }
+.dash-view-frame { flex: 1; width: 100%; border: 0; }
