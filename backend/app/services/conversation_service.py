@@ -106,6 +106,7 @@ async def meta(user: CurrentUser) -> dict:
     return {
         "dataset_version": dataset,
         "retention_days": settings.chat_retention_days,
+        "dashboard_retention_days": settings.dashboard_retention_days,
         "model": settings.openai_model,
         "efforts": list(get_args(Effort)),
         "default_effort": AskRequest.model_fields["effort"].default,

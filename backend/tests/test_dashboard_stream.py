@@ -165,6 +165,9 @@ def test_generate_builds_checks_and_saves_version(http, llm):
     assert saved["results"]["overview"]["q1"]["columns"] == ["provider_pmpm", "benchmark_pmpm"]
     assert saved["queries"]["overview"]["plan"]["queries"][0]["sql"] == PMPM_SQL
     assert saved["spec"]["tabs"][0]["widgets"][0]["id"] == "overview-pmpm"
+    [listed] = http.get("/api/v1/dashboards").json()
+    assert listed["id"] == result["dashboard_id"] and listed["scope"] == SCOPE.model_dump()
+    assert listed["tabs"] == [{"name": saved["spec"]["tabs"][0]["name"], "outcome": "answered"}]
 
 
 def test_generate_repairs_unverified_figures(http, llm):
@@ -202,6 +205,7 @@ def test_expired_dashboards_are_purged(http, llm):
     )
 
     assert http.get(f"/api/v1/dashboards/{dashboard_id}").status_code == 404
+    assert http.get("/api/v1/dashboards").json() == []
     http.portal.call(retention.purge_expired)
     assert (
         db("SELECT 1 FROM app.dashboard_versions WHERE dashboard_id = $1::uuid", dashboard_id) == []

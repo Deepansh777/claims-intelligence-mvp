@@ -7,6 +7,8 @@ import type { Meta } from "./lib/types";
 import { Icon } from "./components/Icon";
 import AskPage from "./pages/AskPage";
 import ConversationsPage from "./pages/ConversationsPage";
+import DashboardPage from "./pages/DashboardPage";
+import DashboardsPage from "./pages/DashboardsPage";
 import DashboardViewPage from "./pages/DashboardViewPage";
 import ExplorerPage from "./pages/ExplorerPage";
 import logoUrl from "./assets/logo.png";
@@ -43,6 +45,14 @@ function Sidebar({ meta, collapsed, onCollapse }: { meta?: Meta; collapsed: bool
         >
           <Icon name="conversations" />
           <span className="nav-label">Conversations</span>
+        </NavLink>
+        <NavLink
+          to="/dashboards"
+          className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}
+          title={collapsed ? "Dashboards" : undefined}
+        >
+          <Icon name="dashboard" />
+          <span className="nav-label">Dashboards</span>
         </NavLink>
         <NavLink
           to="/explorer"
@@ -94,6 +104,8 @@ export default function App() {
           <Route path="/ask/:conversationId?" element={<AskPage meta={meta.data} />} />
           <Route path="/conversations" element={<ConversationsPage meta={meta.data} />} />
           <Route path="/explorer" element={<ExplorerPage />} />
+          <Route path="/dashboards" element={<DashboardsPage meta={meta.data} />} />
+          <Route path="/dashboards/:dashboardId" element={<DashboardPage meta={meta.data} />} />
           <Route path="/dashboards/:dashboardId/view" element={<DashboardViewPage />} />
           <Route path="*" element={<Navigate to="/ask" replace />} />
         </Routes>

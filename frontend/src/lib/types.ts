@@ -168,17 +168,18 @@ export type DashboardTab = {
     queries: { name: string; purpose: string; sql: string }[];
   };
 };
+export type DashboardScope = {
+  level: "pcp" | "pcp_group";
+  provider_name: string;
+  provider_npi: string | null;
+  provider_tin: string;
+  network: string;
+  population: string;
+  period: string;
+};
 export type DashboardPayload = {
   title: string;
-  scope: {
-    level: "pcp" | "pcp_group";
-    provider_name: string;
-    provider_npi: string | null;
-    provider_tin: string;
-    network: string;
-    population: string;
-    period: string;
-  };
+  scope: DashboardScope;
   version: number;
   generated_at: string;
   dataset_loaded_at: string | null;
@@ -186,9 +187,41 @@ export type DashboardPayload = {
   datasets: Record<string, Record<string, Dataset>>;
 };
 
+// Mirrors backend/app/llm/dashboard_schemas.py and routes/dashboards.py.
+export type TabOutline = { id: string; name: string; question: string; metrics: string[]; visuals: string[] };
+export type DashboardOutline = { title: string; filename: string; scope: DashboardScope; tabs: TabOutline[] };
+export type OutlineResult = {
+  action: "outline" | "clarify" | "decline";
+  message: string | null;
+  options: string[];
+  outline: DashboardOutline | null;
+};
+export type TabOutcome = { name: string; outcome: DashboardTab["outcome"] };
+export type DashboardSummary = {
+  id: string;
+  title: string;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+  scope: DashboardScope;
+  tabs: TabOutcome[];
+};
+export type SavedDashboard = {
+  dashboard_id: string;
+  title: string;
+  version: number;
+  updated_at: string;
+  created_at: string;
+  dataset_loaded_at: string | null;
+  request: string;
+  outline: DashboardOutline;
+  spec: { title: string; tabs: TabOutcome[] };
+};
+
 export type Meta = {
   dataset_version: { id: number; created_at: string } | null;
   retention_days: number;
+  dashboard_retention_days: number;
   model: string;
   efforts: string[];
   default_effort: string;

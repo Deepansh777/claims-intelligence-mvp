@@ -42,6 +42,11 @@ async def generate(body: GenerateRequest, user: User):
     )
 
 
+@router.get("")
+async def list_dashboards(user: User):
+    return await dashboard_service.list_dashboards(user)
+
+
 @router.get("/{dashboard_id}")
 async def get_dashboard(dashboard_id: uuid.UUID, user: User):
     found = await dashboard_service.get_dashboard(user, dashboard_id)

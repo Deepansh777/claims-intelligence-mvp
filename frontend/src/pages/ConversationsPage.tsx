@@ -8,12 +8,12 @@ import { Modal } from "../components/Overlay";
 
 const DAY_MS = 86_400_000;
 
-function ageLabel(iso: string) {
+export function ageLabel(iso: string) {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / DAY_MS);
   return days <= 0 ? "Today" : days === 1 ? "Yesterday" : `${days} days ago`;
 }
 
-function RetentionBadge({ expiresAt }: { expiresAt: string }) {
+export function RetentionBadge({ expiresAt }: { expiresAt: string }) {
   const left = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / DAY_MS));
   return <span className={"badge " + (left <= 3 ? "badge--warn" : "badge--neutral")}>{left}d left</span>;
 }

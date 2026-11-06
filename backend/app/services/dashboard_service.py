@@ -230,6 +230,11 @@ async def stream(prep: PreparedRun) -> AsyncIterator[str]:
         await asyncio.shield(tracker.save(status, error_type))
 
 
+async def list_dashboards(user: CurrentUser) -> list[dict]:
+    async with SessionLocal() as db:
+        return await repo.list_dashboards(db, user.id, settings.dashboard_retention_days)
+
+
 async def get_dashboard(user: CurrentUser, dashboard_id: uuid.UUID) -> dict | None:
     async with SessionLocal() as db:
         return await repo.get_current_version(

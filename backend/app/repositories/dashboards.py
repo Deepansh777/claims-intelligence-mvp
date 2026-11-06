@@ -50,6 +50,24 @@ async def insert_version(db: AsyncSession, v: dict) -> None:
     )
 
 
+async def list_dashboards(db: AsyncSession, user_id: str, days: int) -> list[dict]:
+    rows = await db.execute(
+        text(f"""
+            SELECT d.id, d.title, d.current_version, d.created_at, d.updated_at,
+                   v.outline->'scope' AS scope,
+                   (SELECT jsonb_agg(jsonb_build_object('name', t->>'name', 'outcome', t->>'outcome'))
+                    FROM jsonb_array_elements(v.spec->'tabs') t) AS tabs
+            FROM app.dashboards d
+            JOIN app.dashboard_versions v
+              ON v.dashboard_id = d.id AND v.version = d.current_version
+            WHERE d.user_id = :u AND {VISIBLE}
+            ORDER BY d.updated_at DESC
+        """),
+        {"u": user_id, "days": days},
+    )
+    return [dict(r) for r in rows.mappings()]
+
+
 async def get_current_version(
     db: AsyncSession, dashboard_id: uuid.UUID, user_id: str, days: int
 ) -> dict | None:
