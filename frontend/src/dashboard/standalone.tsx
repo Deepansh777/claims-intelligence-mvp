@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "@mui/material/styles";
 import { theme } from "../lib/theme";
 import type { DashboardPayload } from "../lib/types";
+import { CellTooltip } from "../components/CellTooltip";
 import { DashboardDocument } from "./DashboardDocument";
 import "../styles/tokens.css";
 import "../styles/components.css";
@@ -15,5 +16,6 @@ const data = JSON.parse(document.getElementById("dashboard-data")!.textContent!)
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <ThemeProvider theme={theme}>
     <DashboardDocument dashboard={data} />
+    <CellTooltip />
   </ThemeProvider>,
 );

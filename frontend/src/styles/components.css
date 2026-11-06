@@ -140,7 +140,16 @@
   color: var(--muted); text-align: left; padding: 10px 24px; white-space: nowrap;
 }
 .table thead th.num { text-align: right; }
-.table td { border-bottom: 1px solid var(--line); color: #1a2421; padding: 9px 24px; }
+.table td {
+  border-bottom: 1px solid var(--line); color: #1a2421; padding: 9px 24px;
+  white-space: nowrap; max-width: 360px; overflow: hidden; text-overflow: ellipsis;
+}
+/* White on the brand's light teal fails contrast; this teal keeps 4.8:1. */
+.cell-tip {
+  position: fixed; z-index: 2000; padding: 6px 10px; border-radius: 6px; background: #1f7f74; color: #fff;
+  font-size: 0.8125rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none;
+  box-shadow: 0 4px 14px rgba(14, 37, 42, 0.18);
+}
 .table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .table td.muted { color: var(--muted); }
 .table tbody tr:hover { background: rgba(69, 194, 178, 0.04); }

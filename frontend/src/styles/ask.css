@@ -52,4 +52,6 @@
 .md ul { font-size: 0.875rem; line-height: 1.55; padding-left: 18px; margin: 0 0 8px; }
 .md .table { margin-bottom: 8px; }
 .md .table td, .md .table th { padding: 7px 12px; }
+/* A document, not a data grid: its detail cells hold sentences, so they wrap. */
+.md .table td { white-space: normal; max-width: none; overflow: visible; }
 .md .table td:first-child { white-space: nowrap; color: var(--muted); }

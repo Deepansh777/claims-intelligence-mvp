@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import TablePagination from "@mui/material/TablePagination";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiGet, apiSend } from "../lib/apiClient";
 import type { DashboardOutline, DashboardScope, DashboardSummary, Meta, OutlineResult } from "../lib/types";
@@ -12,6 +13,7 @@ import { formatDate } from "../lib/format";
 import { RetentionBadge } from "./ConversationsPage";
 
 const MAX_TABS = 3;
+const PAGE_SIZES = [5, 12, 20];
 const DAY_MS = 86_400_000;
 const ERROR_TEXT = "Something went wrong. Please try again.";
 
@@ -124,6 +126,10 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
   const days = meta?.dashboard_retention_days ?? 30;
   const effort = meta?.default_effort ?? "medium";
   const rows = list.data ?? [];
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(12);
+  // A delete can empty the last page.
+  const shownPage = Math.min(page, Math.max(0, Math.ceil(rows.length / pageSize) - 1));
   const building = (useBuilds().data ?? []).filter((b) => b.status === "running");
 
   const tabsReady = mode === "ai" || userTabs.every((t) => t.name.trim() && t.description.trim());
@@ -413,7 +419,7 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                         <td colSpan={8} />
                       </tr>
                     ))}
-                    {rows.map((d) => {
+                    {rows.slice(shownPage * pageSize, (shownPage + 1) * pageSize).map((d) => {
                       const missing = d.tabs.filter((t) => t.outcome !== "answered").length;
                       return (
                         <tr key={d.id} className="conv-row" onClick={() => navigate(`/dashboards/${d.id}`)}>
@@ -457,6 +463,22 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {rows.length > 0 && (
+              <div className="table-footer">
+                <TablePagination
+                  component="div"
+                  count={rows.length}
+                  page={shownPage}
+                  rowsPerPage={pageSize}
+                  rowsPerPageOptions={PAGE_SIZES}
+                  onPageChange={(_, p) => setPage(p)}
+                  onRowsPerPageChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(0);
+                  }}
+                />
               </div>
             )}
           </div>
