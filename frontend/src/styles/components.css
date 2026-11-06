@@ -362,3 +362,25 @@
 .switch input:checked + .switch-track { background: var(--brand-accent); }
 .switch input:checked + .switch-track::after { transform: translateX(18px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+/* Dashboard build toasts (bottom-right, every tab) */
+.build-toasts { position: fixed; right: 24px; bottom: 24px; z-index: 800; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: min(380px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.build-toast { width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-popover); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.build-toast--built { border-left: 3px solid var(--success); }
+.build-toast--failed { border-left: 3px solid var(--danger); }
+.build-toast-head { display: flex; align-items: flex-start; gap: 10px; }
+.build-toast-head > svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+.build-toast--built .build-toast-head > svg { color: var(--success); }
+.build-toast--failed .build-toast-head > svg { color: var(--danger); }
+.build-toast--cancelled .build-toast-head > svg { color: var(--muted); }
+.build-toast-head > .spinner { margin-top: 3px; flex-shrink: 0; }
+.build-toast-text { flex: 1; min-width: 0; }
+.build-toast-title { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-toast-meta { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.build-toast-message { font-size: 0.85rem; line-height: 1.45; margin-top: 4px; }
+.build-toast-events { list-style: none; margin: 0; padding: 8px 10px; max-height: 220px; overflow-y: auto; background: var(--canvas); border-radius: 8px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 6px; }
+.build-toast-events li { display: flex; gap: 8px; }
+.build-toast-events time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.build-toast-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.build-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow-popover); color: var(--ink); font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+.build-chip:hover { border-color: var(--brand-accent); color: var(--brand-accent); }

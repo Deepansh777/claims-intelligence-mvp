@@ -206,6 +206,25 @@ export type DashboardSummary = {
   scope: DashboardScope;
   tabs: TabOutcome[];
 };
+export type BuildStatus = "running" | "built" | "failed" | "cancelled";
+export type DashboardBuild = {
+  id: string;
+  title: string;
+  request: string;
+  outline: DashboardOutline;
+  effort: string;
+  status: BuildStatus;
+  steps_done: number;
+  steps_total: number;
+  events: { at: string; message: string }[];
+  dashboard_id: string | null;
+  error: string | null;
+  failed_step: string | null;
+  created_at: string;
+  finished_at: string | null;
+  seen_at: string | null;
+  elapsed_ms: number;
+};
 export type SavedDashboard = {
   dashboard_id: string;
   title: string;

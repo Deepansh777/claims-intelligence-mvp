@@ -4,6 +4,7 @@ import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { apiGet } from "./lib/apiClient";
 import { formatDate } from "./lib/format";
 import type { Meta } from "./lib/types";
+import { BuildToasts } from "./components/BuildToasts";
 import { Icon } from "./components/Icon";
 import AskPage from "./pages/AskPage";
 import ConversationsPage from "./pages/ConversationsPage";
@@ -110,6 +111,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/ask" replace />} />
         </Routes>
       </main>
+      <BuildToasts />
     </div>
   );
 }
