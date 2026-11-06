@@ -39,11 +39,34 @@ def numbers_in(text: str) -> set[float]:
     return {float(m.group(1).rstrip(",").replace(",", "")) for m in NUMBER.finditer(text)}
 
 
+def _negative(v: float, s: str) -> str:
+    """Negatives in parentheses, unless the shown value rounds to zero."""
+    return f"({s})" if v < 0 and any(c in "123456789" for c in s) else s
+
+
 def format_value(v: Any, fmt: str) -> str:
     if v is None:
         return "not available"
     if fmt in ("text", "date") or isinstance(v, bool) or not isinstance(v, int | float):
         return str(v)
+    return _negative(v, _format_abs(abs(v), fmt))
+
+
+# shortcut: fixed 3 significant digits; widen if close values in one narrative read the same.
+def format_narrative(v: Any, fmt: str) -> str:
+    """Prose figures: counts and amounts from 10,000 up as K, M or B."""
+    if fmt not in ("usd", "usd2", "int", "number") or isinstance(v, bool):
+        return format_value(v, fmt)
+    if not isinstance(v, int | float) or abs(v) < 1e4:
+        return format_value(v, fmt)
+    x = float(f"{abs(v):.3g}")
+    size, suffix = next(s for s in ((1e9, "B"), (1e6, "M"), (1e3, "K")) if x >= s[0])
+    n = x / size
+    s = f"{n:.{2 if n < 10 else 1 if n < 100 else 0}f}{suffix}"
+    return _negative(v, f"${s}" if fmt.startswith("usd") else s)
+
+
+def _format_abs(v: float, fmt: str) -> str:
     if fmt == "usd":
         return f"${v:,.0f}"
     if fmt == "usd2":
@@ -113,7 +136,7 @@ def _fill(text: str, results: dict[str, QueryResult]) -> tuple[str, list[str]]:
         value, err = _lookup(results, query, column, row)
         if err:
             errors.append(f"placeholder {m.group(0)}: {err}")
-        return format_value(value, fmt or "number")
+        return format_narrative(value, fmt or "number")
 
     return PLACEHOLDER.sub(sub, text or ""), errors
 

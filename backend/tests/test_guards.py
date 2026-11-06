@@ -1,4 +1,11 @@
-from app.llm.guards import FALLBACK_NOTE, FALLBACK_TEXT, answer_errors, resolve_answer
+from app.llm.guards import (
+    FALLBACK_NOTE,
+    FALLBACK_TEXT,
+    answer_errors,
+    format_narrative,
+    format_value,
+    resolve_answer,
+)
 from app.llm.schemas import (
     AnswerSpec,
     Callout,
@@ -68,6 +75,20 @@ def test_valid_answer_resolves_placeholders_and_values():
     assert out["components"][0]["value"] == 418.4
     assert [c["type"] for c in out["components"]] == ["kpi", "line"]
     assert len(out["followups"]) == 3
+
+
+def test_negatives_use_parentheses_and_prose_uses_k_m_b():
+    assert format_value(-1250, "usd") == "($1,250)"
+    assert format_value(-0.052, "pct_ratio") == "(5.2%)"
+    assert format_value(-0.4, "usd") == "$0"
+    assert format_narrative(1_250_000, "usd") == "$1.25M"
+    assert format_narrative(42_600, "int") == "42.6K"
+    assert format_narrative(999_960, "int") == "1.00M"
+    assert format_narrative(-3_400_000_000, "usd2") == "($3.40B)"
+    assert format_narrative(9_999, "usd") == "$9,999"
+    assert format_narrative(0.046, "pct_ratio") == "4.6%"
+    _, out = check(spec("Allowed reached {{q1.total_allowed[last]|usd}}.", [kpi()]))
+    assert out["text"] == "Allowed reached $1.23M."
 
 
 def test_bare_numbers_must_match_results():
