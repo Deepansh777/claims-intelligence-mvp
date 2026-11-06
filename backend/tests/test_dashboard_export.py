@@ -6,7 +6,7 @@ import json
 import re
 
 from conftest import as_user
-from test_dashboard_stream import OUTLINE, events, generate, plan, tab
+from test_dashboard_stream import OUTLINE, generate, plan, tab
 
 from app.llm.dashboard_schemas import DashboardSpec, Widget
 from app.llm.guards import resolve_tab
@@ -132,7 +132,7 @@ def test_filename_is_sanitized():
 def test_export_endpoint_serves_the_same_sandboxed_file(http, llm):
     as_user()
     llm[0].extend([plan(), tab()])
-    dashboard_id = events(generate(http))[-1][1]["dashboard_id"]
+    dashboard_id = generate(http)["dashboard_id"]
     url = f"/api/v1/dashboards/{dashboard_id}/dashboard.html"
 
     view, download = http.get(url), http.get(f"{url}?download=true")

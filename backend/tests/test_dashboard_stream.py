@@ -1,9 +1,12 @@
 """Dashboard outline and generation end to end, with a fake model and the live database."""
 
-import json
+import asyncio
+import time
+import uuid
 
 from conftest import as_user, db
 
+from app.llm import client as llm_client
 from app.llm.dashboard_schemas import (
     DashboardOutline,
     DashboardScope,
@@ -18,7 +21,7 @@ from app.llm.dashboard_schemas import (
 from app.llm.graphs.dashboard import scope_errors
 from app.llm.guards import tab_errors
 from app.llm.schemas import Interpretation, Kpi, PlannedQuery, QueryResult, Ref
-from app.services import retention
+from app.services import dashboard_service, retention
 
 PCP = db(
     "SELECT pcp_npi, pcp_group_tin, pcp_fullname FROM mart.nexus_pcp_roster "
@@ -101,21 +104,27 @@ def tab(finding="Provider PMPM was {{q1.provider_pmpm|usd2}}."):
     )
 
 
-def events(r):
-    return [
-        (
-            block.split("\n")[0].removeprefix("event: "),
-            json.loads(block.split("\n")[1].removeprefix("data: ")),
-        )
-        for block in r.text.strip().split("\n\n")
-    ]
+def submit(http, outline=OUTLINE):
+    return http.post(
+        "/api/v1/dashboards/builds",
+        json={"request": "PMPM dashboard", "outline": outline.model_dump()},
+    )
+
+
+def wait(http, build_id, status="running"):
+    """The build once its status is no longer `status`."""
+    for _ in range(200):
+        build = http.get(f"/api/v1/dashboards/builds/{build_id}").json()
+        if build["status"] != status:
+            return build
+        time.sleep(0.05)
+    raise AssertionError(f"build stayed {status}")
 
 
 def generate(http, outline=OUTLINE):
-    return http.post(
-        "/api/v1/dashboards/stream",
-        json={"request": "PMPM dashboard", "outline": outline.model_dump()},
-    )
+    r = submit(http, outline)
+    assert r.status_code == 202 and r.json()["status"] == "running"
+    return wait(http, r.json()["id"])
 
 
 def test_outline_resolves_provider_and_rejects_invented_ids(http, llm):
@@ -152,11 +161,10 @@ def test_outline_passes_through_decline(http, llm):
 def test_generate_builds_checks_and_saves_version(http, llm):
     as_user()
     llm[0].extend([plan(), tab()])
-    r = generate(http)
+    result = generate(http)
 
-    kinds = [k for k, _ in events(r)]
-    result = events(r)[-1][1]
-    assert set(kinds) == {"status", "result"} and result["outcome"] == "built"
+    assert result["status"] == "built" and result["steps_done"] == result["steps_total"] == 4
+    assert result["events"][-1]["message"] == "Saving the dashboard…"
     saved = http.get(f"/api/v1/dashboards/{result['dashboard_id']}").json()
     assert saved["version"] == 1 and saved["validation"]["overview"] == {
         "status": "ok",
@@ -169,21 +177,70 @@ def test_generate_builds_checks_and_saves_version(http, llm):
     assert listed["id"] == result["dashboard_id"] and listed["scope"] == SCOPE.model_dump()
     assert listed["tabs"] == [{"name": saved["spec"]["tabs"][0]["name"], "outcome": "answered"}]
 
+    [open_build] = http.get("/api/v1/dashboards/builds").json()
+    assert open_build["id"] == result["id"]
+    assert http.post(f"/api/v1/dashboards/builds/{result['id']}/cancel").status_code == 409
+    assert http.post(f"/api/v1/dashboards/builds/{result['id']}/seen").status_code == 204
+    assert http.get("/api/v1/dashboards/builds").json() == []
+
 
 def test_generate_repairs_unverified_figures(http, llm):
     as_user()
     queue, prompts = llm
     queue += [plan(), tab("Provider PMPM was $123,456.78."), tab()]
-    result = events(generate(http))[-1][1]
-    assert result["outcome"] == "built"
+    assert generate(http)["status"] == "built"
     assert "is not in the results; use a placeholder" in prompts[-1]
 
 
 def test_failed_sql_saves_nothing(http, llm):
     as_user()
     llm[0].extend([plan("SELECT nope FROM mart.nexus_pcp_roster")] * 3)
-    result = events(generate(http))[-1][1]
-    assert result["outcome"] == "failed"
+    result = generate(http)
+    assert result["status"] == "failed" and result["dashboard_id"] is None
+    assert result["failed_step"].startswith("Performance overview: ")
+    assert http.get("/api/v1/dashboards").json() == []
+
+
+def test_cancel_stops_build_and_saves_nothing(http, monkeypatch):
+    as_user()
+    started = []
+
+    async def hang(*args):
+        started.append(True)
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(llm_client, "call_structured", hang)
+    build_id = submit(http).json()["id"]
+    for _ in range(100):
+        if started:
+            break
+        time.sleep(0.05)
+
+    r = http.post(f"/api/v1/dashboards/builds/{build_id}/cancel")
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    assert http.post(f"/api/v1/dashboards/builds/{build_id}/cancel").status_code == 409
+    for _ in range(100):
+        if uuid.UUID(build_id) not in dashboard_service._tasks:
+            break
+        time.sleep(0.05)
+    assert uuid.UUID(build_id) not in dashboard_service._tasks
+    assert http.get("/api/v1/dashboards").json() == []
+
+
+def test_interrupted_builds_fail_at_startup(http, llm):
+    user = as_user()
+    build_id = uuid.uuid4()
+    db(
+        "INSERT INTO app.dashboard_builds (id, user_id, title, request, outline, effort, "
+        "steps_total, events) VALUES ($1, $2, 't', 'r', '{}', 'medium', 4, "
+        """'[{"at": "2026-11-06", "message": "Overview: planning the analysis…"}]')""",
+        build_id,
+        user,
+    )
+    http.portal.call(retention.fail_interrupted_builds)
+    build = http.get(f"/api/v1/dashboards/builds/{build_id}").json()
+    assert build["status"] == "failed"
+    assert build["failed_step"] == "Overview: planning the analysis…"
 
 
 def test_generate_rejects_unknown_provider(http, llm):
@@ -191,14 +248,14 @@ def test_generate_rejects_unknown_provider(http, llm):
     outline = OUTLINE.model_copy(
         update={"scope": SCOPE.model_copy(update={"provider_tin": "000000000"})}
     )
-    r = generate(http, outline)
+    r = submit(http, outline)
     assert r.status_code == 422 and r.json()["code"] == "invalid_outline"
 
 
 def test_expired_dashboards_are_purged(http, llm):
     user = as_user()
     llm[0].extend([plan(), tab()])
-    dashboard_id = events(generate(http))[-1][1]["dashboard_id"]
+    dashboard_id = generate(http)["dashboard_id"]
     db(
         "UPDATE app.dashboards SET updated_at = now() - interval '31 days' WHERE id = $1::uuid",
         dashboard_id,

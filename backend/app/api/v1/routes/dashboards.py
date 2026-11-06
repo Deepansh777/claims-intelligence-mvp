@@ -1,8 +1,8 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.api.deps import CurrentUser, get_current_user
 from app.schemas.dashboards import GenerateRequest, OutlineRequest
@@ -27,19 +27,43 @@ async def outline(body: OutlineRequest, user: User):
         return _error(504, "Outlining the dashboard took too long. Try again.", "timeout")
 
 
-@router.post("/stream")
-async def generate(body: GenerateRequest, user: User):
+@router.post("/builds", status_code=202)
+async def start_build(body: GenerateRequest, user: User):
     try:
-        prep = await dashboard_service.prepare(user, body)
+        return await dashboard_service.start_build(user, body)
     except dashboard_service.Invalid as e:
         return _error(422, str(e), "invalid_outline")
     except dashboard_service.RateLimited:
         return _error(429, RATE_LIMITED, "rate_limited")
-    return StreamingResponse(
-        dashboard_service.stream(prep),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+
+
+@router.get("/builds")
+async def list_builds(user: User):
+    """Running builds and outcomes not yet dismissed; the client polls this while any run."""
+    return await dashboard_service.list_builds(user)
+
+
+@router.get("/builds/{build_id}")
+async def get_build(build_id: uuid.UUID, user: User):
+    found = await dashboard_service.get_build(user, build_id)
+    return found if found is not None else _error(404, "Build not found.", "not_found")
+
+
+@router.post("/builds/{build_id}/cancel")
+async def cancel_build(build_id: uuid.UUID, user: User):
+    try:
+        return await dashboard_service.cancel_build(user, build_id)
+    except dashboard_service.NotFound:
+        return _error(404, "Build not found.", "not_found")
+    except dashboard_service.Conflict:
+        return _error(409, "This build has already finished.", "conflict")
+
+
+@router.post("/builds/{build_id}/seen", status_code=204)
+async def mark_build_seen(build_id: uuid.UUID, user: User):
+    if not await dashboard_service.mark_build_seen(user, build_id):
+        return _error(404, "Finished build not found.", "not_found")
+    return Response(status_code=204)
 
 
 @router.get("")
