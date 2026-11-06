@@ -74,18 +74,6 @@ async def rerun(run_id: uuid.UUID, user: User):
         return _error(429, "Too many questions in the last hour. Try again later.", "rate_limited")
 
 
-@runs_router.get("/{run_id}/export.csv")
-async def export_csv(run_id: uuid.UUID, user: User, query: Literal["q1", "q2", "q3"] = "q1"):
-    body = await conversation_service.export_csv(user, run_id, query)
-    if body is None:
-        return _not_found("Result")
-    return Response(
-        body,
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="result-{run_id}-{query}.csv"'},
-    )
-
-
 @meta_router.get("/meta")
 async def meta(user: User) -> dict:
     return await conversation_service.meta(user)

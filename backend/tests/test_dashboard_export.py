@@ -137,7 +137,7 @@ def test_export_endpoint_serves_the_same_sandboxed_file(http, llm):
 
     view, download = http.get(url), http.get(f"{url}?download=true")
     assert view.status_code == 200 and view.text == download.text
-    assert view.headers["content-security-policy"].startswith("sandbox allow-scripts;")
+    assert view.headers["content-security-policy"].startswith("sandbox allow-scripts allow-downloads;")
     assert "content-disposition" not in view.headers
     assert (
         download.headers["content-disposition"]

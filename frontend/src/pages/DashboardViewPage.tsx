@@ -15,7 +15,7 @@ export default function DashboardViewPage() {
           Download HTML
         </a>
       </div>
-      <iframe className="dash-view-frame" title="Dashboard" sandbox="allow-scripts" referrerPolicy="no-referrer" src={url} />
+      <iframe className="dash-view-frame" title="Dashboard" sandbox="allow-scripts allow-downloads" referrerPolicy="no-referrer" src={url} />
     </div>
   );
 }

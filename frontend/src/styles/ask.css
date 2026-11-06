@@ -21,11 +21,11 @@
 
 .table-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--line); }
 .table-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 0.8125rem; color: var(--muted); }
-.table-filter select {
-  font-size: 0.8125rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px;
-  background: var(--card); color: var(--ink);
-}
-.table-footer { align-items: center; gap: 8px; }
+.table-filter .MuiSelect-select { font-size: 0.8125rem; min-width: 80px; }
+.table-footer { align-items: center; gap: 8px; padding-top: 4px; padding-bottom: 4px; }
+.table-footer .MuiTablePagination-toolbar { min-height: 44px; padding: 0; }
+.chart-actions { position: absolute; top: 16px; right: 16px; display: flex; gap: 6px; }
+.chart-card > .card-title, .chart-card > .card-subtitle { padding-right: 80px; }
 
 .banner > span { flex: 1; }
 .banner .link-btn { align-self: center; }

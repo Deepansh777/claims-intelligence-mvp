@@ -77,7 +77,7 @@ export default function DashboardPage({ meta }: { meta?: Meta }) {
                   </span>
                 </div>
               )}
-              <iframe className="dash-preview" title="Dashboard preview" sandbox="allow-scripts" referrerPolicy="no-referrer" src={url} />
+              <iframe className="dash-preview" title="Dashboard preview" sandbox="allow-scripts allow-downloads" referrerPolicy="no-referrer" src={url} />
             </>
           )}
         </div>

@@ -41,7 +41,7 @@ def _viewer() -> tuple[str, str, str]:
 
 def response_csp() -> str:
     """Header for the served file: an opaque origin even when opened straight from the API."""
-    return "sandbox allow-scripts; " + CSP.format(_viewer()[2])
+    return "sandbox allow-scripts allow-downloads; " + CSP.format(_viewer()[2])
 
 
 def _json_for_html(data: dict) -> str:

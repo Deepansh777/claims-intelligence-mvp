@@ -62,7 +62,7 @@ function Components({ answer }: { answer: Answer }) {
     }
     const data = answer.datasets[c.query];
     if (!data) return;
-    if (c.type === "table") out.push(<DataTable key={i} spec={c} data={data} runId={answer.run_id} />);
+    if (c.type === "table") out.push(<DataTable key={i} spec={c} data={data} />);
     else if (c.type === "hbar") out.push(<HBarView key={i} spec={c} data={data} />);
     else if (c.type === "scatter") out.push(<ScatterView key={i} spec={c} data={data} />);
     else out.push(<SeriesChartView key={i} spec={c} data={data} />);

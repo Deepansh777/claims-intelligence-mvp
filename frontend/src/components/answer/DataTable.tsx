@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
-import { BASE_URL } from "../../lib/apiClient";
+import { useId, useMemo, useState } from "react";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import TablePagination from "@mui/material/TablePagination";
+import { downloadCsv } from "../../lib/download";
 import { formatValue, isNumericType } from "../../lib/format";
 import type { Dataset, Table } from "../../lib/types";
 import { Icon } from "../Icon";
 
-const PAGE = 50;
+const PAGE_SIZES = [5, 12, 20];
 const MAX_FILTER_OPTIONS = 200;
 
 function compare(a: unknown, b: unknown): number {
@@ -14,15 +17,32 @@ function compare(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
-/** Sorting, filtering and paging all run on the rows already loaded; nothing is re-queried. */
-/** Without runId (offline dashboards) there is no API to export from, so no export link. */
-export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; runId?: string }) {
+function Filter({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (v: string) => void }) {
+  const id = useId();
+  return (
+    <div className="table-filter">
+      <span id={id}>{label}</span>
+      <Select size="small" labelId={id} value={value} displayEmpty onChange={(e) => onChange(e.target.value)}>
+        <MenuItem value="">All</MenuItem>
+        {values.map((v) => (
+          <MenuItem key={v} value={v}>
+            {v}
+          </MenuItem>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
+/** Sorting, filtering, paging and export all run on the rows already loaded; nothing is re-queried. */
+export function DataTable({ spec, data }: { spec: Table; data: Dataset }) {
   const cols = spec.columns
     .map((c) => ({ ...c, i: data.columns.indexOf(c.column) }))
     .filter((c) => c.i >= 0);
   const [sort, setSort] = useState({ column: spec.sort_column, desc: spec.sort_desc });
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [limit, setLimit] = useState(PAGE);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(12);
 
   const filterOptions = useMemo(
     () =>
@@ -50,9 +70,16 @@ export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; r
     return out;
   }, [data, filters, filterOptions, sort]);
 
-  const toggleSort = (column: string) =>
+  const toggleSort = (column: string) => {
     setSort((s) => (s.column === column ? { column, desc: !s.desc } : { column, desc: false }));
+    setPage(0);
+  };
+  const setFilter = (name: string, value: string) => {
+    setFilters({ ...filters, [name]: value });
+    setPage(0);
+  };
   const filtered = rows.length !== data.rows.length;
+  const shownPage = Math.min(page, Math.max(0, Math.ceil(rows.length / pageSize) - 1));
 
   return (
     <div className="card-raised table-card">
@@ -73,26 +100,22 @@ export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; r
       {filterOptions.length > 0 && (
         <div className="table-filters">
           {filterOptions.map((f) => (
-            <label key={f.name} className="table-filter">
-              <span>{spec.columns.find((c) => c.column === f.name)?.label ?? f.name}</span>
-              <select
-                value={filters[f.name] ?? ""}
-                onChange={(e) => {
-                  setFilters({ ...filters, [f.name]: e.target.value });
-                  setLimit(PAGE);
-                }}
-              >
-                <option value="">All</option>
-                {f.values.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Filter
+              key={f.name}
+              label={spec.columns.find((c) => c.column === f.name)?.label ?? f.name}
+              value={filters[f.name] ?? ""}
+              values={f.values}
+              onChange={(v) => setFilter(f.name, v)}
+            />
           ))}
           {filtered && (
-            <button className="link-btn" onClick={() => setFilters({})}>
+            <button
+              className="link-btn"
+              onClick={() => {
+                setFilters({});
+                setPage(0);
+              }}
+            >
               Clear filters
             </button>
           )}
@@ -121,7 +144,7 @@ export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; r
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, limit).map((r, ri) => (
+            {rows.slice(shownPage * pageSize, (shownPage + 1) * pageSize).map((r, ri) => (
               <tr key={ri}>
                 {cols.map((c) => (
                   <td key={c.column} className={isNumericType(data.types[c.i]) ? "num" : ""}>
@@ -134,18 +157,26 @@ export function DataTable({ spec, data, runId }: { spec: Table; data: Dataset; r
         </table>
       </div>
       <div className="table-footer">
-        {rows.length > limit && (
-          <button className="btn btn-text" onClick={() => setLimit(limit + PAGE * 4)}>
-            Show more ({(rows.length - limit).toLocaleString()} hidden)
-          </button>
-        )}
+        <button
+          className="btn btn-secondary"
+          onClick={() => downloadCsv(spec.title, cols.map((c) => c.column), rows.map((r) => cols.map((c) => r[c.i])))}
+        >
+          <Icon name="download" />
+          Export data
+        </button>
         <span className="spacer" />
-        {runId && (
-          <a className="btn btn-secondary" href={`${BASE_URL}/runs/${runId}/export.csv?query=${spec.query}`} download>
-            <Icon name="download" />
-            Export Data
-          </a>
-        )}
+        <TablePagination
+          component="div"
+          count={rows.length}
+          page={shownPage}
+          rowsPerPage={pageSize}
+          rowsPerPageOptions={PAGE_SIZES}
+          onPageChange={(_, p) => setPage(p)}
+          onRowsPerPageChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(0);
+          }}
+        />
       </div>
     </div>
   );

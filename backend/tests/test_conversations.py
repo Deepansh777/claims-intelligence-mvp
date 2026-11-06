@@ -3,7 +3,6 @@
 import json
 import uuid
 
-import pytest
 from conftest import as_user, db
 from test_ask_stream import PMPM_SQL, QUESTION, query_plan
 
@@ -99,7 +98,6 @@ def test_other_user_cannot_see_or_touch_a_conversation(http, llm):
     assert http.get(f"{API}/conversations/{conversation_id}").status_code == 404
     assert http.delete(f"{API}/conversations/{conversation_id}").status_code == 404
     assert http.post(f"{API}/runs/{result['run_id']}/rerun").status_code == 404
-    assert http.get(f"{API}/runs/{result['run_id']}/export.csv").status_code == 404
     assert rows_for_run(result["run_id"]) == (1, 1)
 
 
@@ -249,16 +247,7 @@ def test_answers_without_sql_cannot_be_rerun(http, llm):
     assert (r.status_code, r.json()["code"]) == (409, "conflict")
 
 
-def test_export_csv_is_the_stored_result(http, llm):
-    as_user()
-    _, result = answered(http, llm)
-    r = http.get(f"{API}/runs/{result['run_id']}/export.csv")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
-    header, value = r.text.strip().splitlines()
-    assert header == "pmpm"
-    assert float(value) == pytest.approx(result["components"][0]["value"])
-    assert http.get(f"{API}/runs/{result['run_id']}/export.csv?query=q2").status_code == 404
-    assert http.get(f"{API}/runs/{result['run_id']}/export.csv?query=x").status_code == 422
+def test_csv_cell_neutralises_formulas():
     assert conversation_service.csv_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
     assert conversation_service.csv_cell(-5) == -5
 

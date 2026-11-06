@@ -1,7 +1,5 @@
 """Saved conversations: list, open, delete, export. Expired messages are never returned."""
 
-import csv
-import io
 import uuid
 from datetime import timedelta
 from typing import get_args
@@ -83,21 +81,6 @@ def csv_cell(value):
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
         return "'" + value
     return value
-
-
-async def export_csv(user: CurrentUser, run_id: uuid.UUID, query: str) -> str | None:
-    """The stored result exactly as displayed (up to 5,000 rows)."""
-    async with SessionLocal() as db:
-        if await repo.get_run(db, run_id, user.id, settings.chat_retention_days) is None:
-            return None
-        data = (await repo.run_datasets(db, [run_id])).get(run_id, {}).get(query)
-    if data is None:
-        return None
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(data["columns"])
-    writer.writerows([csv_cell(v) for v in row] for row in data["rows"])
-    return out.getvalue()
 
 
 async def meta(user: CurrentUser) -> dict:
