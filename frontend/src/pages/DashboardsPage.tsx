@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, apiGet, apiSend, apiStream } from "../lib/apiClient";
+import { ApiError, apiGet, apiSend } from "../lib/apiClient";
 import type { DashboardOutline, DashboardScope, DashboardSummary, Meta, OutlineResult } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { ageLabel, RetentionBadge } from "./ConversationsPage";
@@ -11,7 +11,6 @@ const DAY_MS = 86_400_000;
 const ERROR_TEXT = "Something went wrong. Please try again.";
 
 type UserTab = { name: string; description: string };
-type Run = { status: string; error?: string };
 
 export function scopeLine(s: DashboardScope) {
   const ids = s.provider_npi ? `NPI ${s.provider_npi} · TIN ${s.provider_tin}` : `TIN ${s.provider_tin}`;
@@ -97,15 +96,12 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
   const [proposal, setProposal] = useState<OutlineResult | null>(null);
   const [outline, setOutline] = useState<DashboardOutline | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [run, setRun] = useState<Run | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const list = useQuery({ queryKey: ["dashboards"], queryFn: () => apiGet<DashboardSummary[]>("/dashboards") });
   const days = meta?.dashboard_retention_days ?? 30;
   const effort = meta?.default_effort ?? "medium";
-  const generating = !!run && !run.error;
   const rows = list.data ?? [];
-
-  useEffect(() => () => abortRef.current?.abort(), []);
 
   const tabsReady = mode === "ai" || userTabs.every((t) => t.name.trim() && t.description.trim());
   const outlineReady = !!outline?.title.trim() && outline.tabs.every((t) => t.name.trim() && t.question.trim());
@@ -137,41 +133,27 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
     propose(text);
   }
 
+  // The build runs on the server; its progress and outcome show in the build toast.
   async function generate() {
-    if (!outline || generating) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setRun({ status: "Starting…" });
+    if (!outline || starting) return;
+    setStarting(true);
+    setBuildError(null);
     try {
-      await apiStream(
-        "/dashboards/stream",
-        { request, outline, effort },
-        (event, data) => {
-          if (event === "status") setRun({ status: data.message });
-          else if (event === "error") setRun({ status: "", error: data.message });
-          else if (data.outcome === "failed") setRun({ status: "", error: data.text });
-          else {
-            qc.invalidateQueries({ queryKey: ["dashboards"] });
-            navigate(`/dashboards/${data.dashboard_id}`);
-          }
-        },
-        controller.signal,
-      );
+      await apiSend("POST", "/dashboards/builds", { request, outline, effort });
+      qc.invalidateQueries({ queryKey: ["builds"] });
+      startOver();
+      setRequest("");
     } catch (e) {
-      if (!controller.signal.aborted) setRun({ status: "", error: errorText(e) });
+      setBuildError(errorText(e));
+    } finally {
+      setStarting(false);
     }
-  }
-
-  // Closing the stream stops the run on the server; nothing is saved.
-  function stop() {
-    abortRef.current?.abort();
-    setRun(null);
   }
 
   function startOver() {
     setProposal(null);
     setOutline(null);
-    setRun(null);
+    setBuildError(null);
     setError(null);
   }
 
@@ -323,40 +305,28 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                     <div className="card-subtitle">Adjust tab names and questions, or remove a tab, then build the dashboard.</div>
                   </div>
                 </div>
-                <fieldset className="dash-fieldset" disabled={generating}>
+                <fieldset className="dash-fieldset" disabled={starting}>
                   <OutlineEditor outline={outline} onChange={setOutline} />
                 </fieldset>
-                {run?.error && (
+                {buildError && (
                   <div className="banner banner--error">
                     <Icon name="warn" />
-                    <span>{run.error}</span>
+                    <span>{buildError}</span>
                   </div>
                 )}
                 <div className="form-actions">
-                  {generating ? (
-                    <>
-                      <span className="thinking" role="status">
-                        <span className="spinner sm" />
-                        {run.status}
-                      </span>
-                      <button className="btn btn-secondary" onClick={stop}>
-                        <Icon name="stop" />
-                        Stop
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn btn-secondary" onClick={startOver}>
-                        Start over
-                      </button>
-                      <button className="btn btn-primary" onClick={generate} disabled={!outlineReady}>
-                        <Icon name="play" />
-                        {run?.error ? "Try again" : "Build dashboard"}
-                      </button>
-                    </>
-                  )}
+                  <button className="btn btn-secondary" onClick={startOver} disabled={starting}>
+                    Start over
+                  </button>
+                  <button className="btn btn-primary" onClick={generate} disabled={!outlineReady || starting}>
+                    <Icon name="play" />
+                    {starting ? "Starting…" : buildError ? "Try again" : "Build dashboard"}
+                  </button>
                 </div>
-                {generating && <p className="field-hint">Building usually takes one to two minutes. Leaving this page stops it.</p>}
+                <p className="field-hint">
+                  Building usually takes one to two minutes. It keeps going if you leave this page, and its progress shows in the
+                  bottom-right corner.
+                </p>
               </>
             )}
           </div>
