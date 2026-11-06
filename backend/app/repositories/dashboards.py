@@ -90,7 +90,10 @@ async def get_current_version(
 
 BUILD_COLUMNS = (
     "id, title, request, outline, effort, status, steps_done, steps_total, events, "
-    "dashboard_id, error, failed_step, created_at, finished_at, seen_at"
+    "dashboard_id, error, failed_step, created_at, finished_at, seen_at, "
+    # Server-side so the client's clock doesn't skew the elapsed time it shows.
+    "round(extract(epoch FROM coalesce(finished_at, now()) - created_at) * 1000)::bigint "
+    "AS elapsed_ms"
 )
 BUILD_VISIBLE = "user_id = :u AND created_at >= now() - make_interval(days => :days)"
 
