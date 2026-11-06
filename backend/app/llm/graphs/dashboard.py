@@ -119,8 +119,9 @@ def tab_allowed(request: str, outline: DashboardOutline, plan: TabPlan | None) -
     return numbers_in(text)
 
 
-def _status(message: str) -> None:
-    get_stream_writer()({"public": True, "message": message})
+def _status(message: str, step: str) -> None:
+    """`step` names the progress step (tab id and phase) that the message belongs to."""
+    get_stream_writer()({"public": True, "message": message, "step": step})
 
 
 async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
@@ -137,7 +138,8 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         _status(
             f"{t.name}: planning the analysis…"
             if attempt == 1
-            else f"{t.name}: fixing the query (attempt {attempt} of {MAX_SQL_ATTEMPTS})…"
+            else f"{t.name}: fixing the query (attempt {attempt} of {MAX_SQL_ATTEMPTS})…",
+            f"{t.id}:plan",
         )
         prompt = f"Step: plan\n{head}"
         if error:
@@ -150,7 +152,7 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
             plan.queries[:3],
             config["configurable"]["run_query"],
             attempt,
-            lambda m: _status(f"{t.name}: {m[0].lower()}{m[1:]}"),
+            lambda m: _status(f"{t.name}: {m[0].lower()}{m[1:]}", f"{t.id}:query"),
         )
         executions += new
         if not error:
@@ -180,7 +182,8 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         _status(
             f"{t.name}: writing the findings…"
             if attempt == 1
-            else f"{t.name}: checking the figures…"
+            else f"{t.name}: checking the figures…",
+            f"{t.id}:compose",
         )
         parts = [f"Step: compose\n{head}"]
         if plan.interpretation:

@@ -17,9 +17,10 @@ def sse(event: str, data: dict) -> str:
 
 
 async def run_gated(graph, inputs: dict, config: dict) -> AsyncIterator[tuple[str, Any]]:
-    """Yields ("status", {"message": str}) and ("state", latest graph state)."""
+    """Yields ("status", {"message": str, "step": str | None}) and ("state", latest graph state)."""
     async for mode, data in graph.astream(inputs, config=config, stream_mode=["custom", "values"]):
         if mode == "custom" and isinstance(data, dict) and data.get("public"):
-            yield "status", {"message": str(data["message"])[:MAX_STATUS_LEN]}
+            message = str(data["message"])[:MAX_STATUS_LEN]
+            yield "status", {"message": message, "step": data.get("step")}
         elif mode == "values":
             yield "state", data
