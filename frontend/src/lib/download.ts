@@ -25,8 +25,11 @@ function save(filename: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export const downloadText = (filename: string, text: string, type: string) =>
+  save(filename, new Blob([text], { type: `${type};charset=utf-8` }));
+
 export const downloadCsv = (title: string, header: string[], rows: unknown[][]) =>
-  save(`${fileStem(title)}.csv`, new Blob([toCsv(header, rows)], { type: "text/csv;charset=utf-8" }));
+  downloadText(`${fileStem(title)}.csv`, toCsv(header, rows), "text/csv");
 
 const PAD = 24;
 const SCALE = 2;

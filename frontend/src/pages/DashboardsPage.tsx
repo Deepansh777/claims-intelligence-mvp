@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiGet, apiSend } from "../lib/apiClient";
 import type { DashboardOutline, DashboardScope, DashboardSummary, Meta, OutlineResult } from "../lib/types";
 import { useBuilds } from "../components/BuildToasts";
+import { DashboardDetails, type DetailKind } from "../components/DashboardDetails";
 import { Icon } from "../components/Icon";
+import { Modal } from "../components/Overlay";
 import { stepLabel } from "../lib/builds";
-import { ageLabel, RetentionBadge } from "./ConversationsPage";
+import { formatDate } from "../lib/format";
+import { RetentionBadge } from "./ConversationsPage";
 
 const MAX_TABS = 3;
 const DAY_MS = 86_400_000;
@@ -17,6 +20,14 @@ type UserTab = { name: string; description: string };
 export function scopeLine(s: DashboardScope) {
   const ids = s.provider_npi ? `NPI ${s.provider_npi} · TIN ${s.provider_tin}` : `TIN ${s.provider_tin}`;
   return `${s.provider_name} · ${ids} · ${s.network}`;
+}
+
+const count = (n: number | null) => (n == null ? "—" : n.toLocaleString());
+
+/** As in Ask's execution details; a dash when the dashboard predates usage capture. */
+function costLabel(d: DashboardSummary) {
+  if (d.cost_usd != null) return `$${Number(d.cost_usd).toFixed(4)}`;
+  return d.input_tokens == null ? "—" : "Not priced";
 }
 
 function errorText(e: unknown) {
@@ -100,6 +111,15 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [details, setDetails] = useState<{ d: DashboardSummary; kind: DetailKind } | null>(null);
+  const [confirm, setConfirm] = useState<DashboardSummary | null>(null);
+  const remove = useMutation({
+    mutationFn: (id: string) => apiSend<void>("DELETE", `/dashboards/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboards"] });
+      setConfirm(null);
+    },
+  });
   const list = useQuery({ queryKey: ["dashboards"], queryFn: () => apiGet<DashboardSummary[]>("/dashboards") });
   const days = meta?.dashboard_retention_days ?? 30;
   const effort = meta?.default_effort ?? "medium";
@@ -366,8 +386,15 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                       <th>Dashboard</th>
                       <th>Provider</th>
                       <th>Tabs</th>
-                      <th>Updated</th>
+                      <th>Created on</th>
+                      <th>Created by</th>
+                      <th>Model used</th>
+                      <th className="num">Input tokens</th>
+                      <th className="num">Cached tokens</th>
+                      <th className="num">Output tokens</th>
+                      <th className="num">Cost</th>
                       <th>Retention</th>
+                      <th aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>
@@ -383,7 +410,7 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                         <td>{scopeLine(b.outline.scope)}</td>
                         <td>{b.outline.tabs.length}</td>
                         <td>{stepLabel(b.steps_done, b.steps_total)}</td>
-                        <td>—</td>
+                        <td colSpan={8} />
                       </tr>
                     ))}
                     {rows.map((d) => {
@@ -404,9 +431,26 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
                               </span>
                             )}
                           </td>
-                          <td>{ageLabel(d.updated_at)}</td>
+                          <td>{formatDate(d.created_at)}</td>
+                          <td>{d.created_by}</td>
+                          <td>{d.model ? `${d.model}${d.effort ? ` (${d.effort})` : ""}` : "—"}</td>
+                          <td className="num">{count(d.input_tokens)}</td>
+                          <td className="num">{count(d.cached_input_tokens)}</td>
+                          <td className="num">{count(d.output_tokens)}</td>
+                          <td className="num">{costLabel(d)}</td>
                           <td>
                             <RetentionBadge expiresAt={new Date(new Date(d.updated_at).getTime() + days * DAY_MS).toISOString()} />
+                          </td>
+                          <td className="conv-actions" onClick={(e) => e.stopPropagation()}>
+                            <button className="icon-btn" aria-label={`Show methodology: ${d.title}`} title="Show methodology" onClick={() => setDetails({ d, kind: "methodology" })}>
+                              <Icon name="methodology" />
+                            </button>
+                            <button className="icon-btn" aria-label={`SQL queries: ${d.title}`} title="SQL queries" onClick={() => setDetails({ d, kind: "sql" })}>
+                              <Icon name="database" />
+                            </button>
+                            <button className="icon-btn" aria-label={`Delete dashboard: ${d.title}`} title="Delete dashboard" onClick={() => setConfirm(d)}>
+                              <Icon name="trash" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -418,6 +462,30 @@ export default function DashboardsPage({ meta }: { meta?: Meta }) {
           </div>
         </div>
       </div>
+      {details && (
+        <DashboardDetails id={details.d.id} title={details.d.title} kind={details.kind} onClose={() => setDetails(null)} />
+      )}
+      {confirm && (
+        <Modal onClose={() => setConfirm(null)}>
+          <h2>Delete this dashboard?</h2>
+          <p>“{confirm.title}” and its saved versions will be removed permanently. This can't be undone.</p>
+          {remove.isError && (
+            <div className="banner banner--error">
+              <Icon name="warn" />
+              <span>{remove.error.message}</span>
+            </div>
+          )}
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+            <button className="btn btn-danger" onClick={() => remove.mutate(confirm.id)} disabled={remove.isPending}>
+              <Icon name="trash" />
+              {remove.isPending ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }

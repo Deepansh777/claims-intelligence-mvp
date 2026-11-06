@@ -205,7 +205,24 @@ export type DashboardSummary = {
   updated_at: string;
   scope: DashboardScope;
   tabs: TabOutcome[];
+  created_by: string;
+  // Null when the dashboard predates usage capture.
+  model: string | null;
+  effort: string | null;
+  input_tokens: number | null;
+  cached_input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
 };
+export type DashboardQuery = {
+  tab: string;
+  name: string;
+  purpose: string;
+  sql: string;
+  row_count: number | null;
+  duration_ms: number | null;
+};
+export type DashboardMethodology = { markdown: string; queries: DashboardQuery[] };
 export type BuildStatus = "running" | "built" | "failed" | "cancelled";
 export type DashboardBuild = {
   id: string;
