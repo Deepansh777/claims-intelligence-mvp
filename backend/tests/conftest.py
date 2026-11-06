@@ -39,8 +39,8 @@ def http():
     app.dependency_overrides.clear()
 
 
-def as_user() -> str:
-    user = CurrentUser(id=f"test-{uuid.uuid4().hex[:8]}", is_admin=False)
+def as_user(user_id: str | None = None) -> str:
+    user = CurrentUser(id=user_id or f"test-{uuid.uuid4().hex[:8]}", is_admin=False)
     app.dependency_overrides[get_current_user] = lambda: user
     return user.id
 

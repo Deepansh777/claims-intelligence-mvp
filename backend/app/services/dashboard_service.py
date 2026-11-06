@@ -310,6 +310,18 @@ async def get_dashboard(user: CurrentUser, dashboard_id: uuid.UUID) -> dict | No
         )
 
 
+async def delete_dashboard(user: CurrentUser, dashboard_id: uuid.UUID) -> bool:
+    async with SessionLocal() as db:
+        deleted = await repo.delete_dashboard(db, dashboard_id, user.id)
+        await db.commit()
+    return deleted
+
+
+async def methodology(user: CurrentUser, dashboard_id: uuid.UUID) -> dict | None:
+    v = await get_dashboard(user, dashboard_id)
+    return None if v is None else dashboard_export.methodology(v)
+
+
 async def export_html(user: CurrentUser, dashboard_id: uuid.UUID) -> tuple[str, str] | None:
     """(filename, HTML) of the current version, the same file for viewing and download."""
     v = await get_dashboard(user, dashboard_id)

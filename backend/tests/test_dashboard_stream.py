@@ -184,6 +184,35 @@ def test_generate_builds_checks_and_saves_version(http, llm):
     assert http.get("/api/v1/dashboards/builds").json() == []
 
 
+def test_list_usage_methodology_and_delete(http, llm):
+    user = as_user()
+    llm[0].extend([plan(), tab()])
+    dashboard_id = generate(http)["dashboard_id"]
+    for _ in range(100):  # usage is written just after the build is marked built
+        [listed] = http.get("/api/v1/dashboards").json()
+        if listed["model"]:
+            break
+        time.sleep(0.05)
+    assert listed["created_by"] == user and listed["effort"] == "medium"
+    assert listed["input_tokens"] == 0 and listed["cost_usd"] == 0  # the fake model reports none
+
+    db("DELETE FROM llm_metrics.llm_runs WHERE user_id = $1", user)
+    [listed] = http.get("/api/v1/dashboards").json()
+    assert listed["model"] is None and listed["input_tokens"] is None and listed["cost_usd"] is None
+
+    m = http.get(f"/api/v1/dashboards/{dashboard_id}/methodology").json()
+    assert m["markdown"].startswith("# Performance overview\n")
+    assert [(q["name"], q["sql"], q["row_count"]) for q in m["queries"]] == [("q1", PMPM_SQL, 1)]
+
+    as_user()
+    assert http.get(f"/api/v1/dashboards/{dashboard_id}/methodology").status_code == 404
+    assert http.delete(f"/api/v1/dashboards/{dashboard_id}").status_code == 404
+    as_user(user)
+    assert http.delete(f"/api/v1/dashboards/{dashboard_id}").status_code == 204
+    assert http.get("/api/v1/dashboards").json() == []
+    assert http.delete(f"/api/v1/dashboards/{dashboard_id}").status_code == 404
+
+
 def test_generate_repairs_unverified_figures(http, llm):
     as_user()
     queue, prompts = llm

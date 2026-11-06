@@ -77,6 +77,20 @@ async def get_dashboard(dashboard_id: uuid.UUID, user: User):
     return found if found is not None else _error(404, "Dashboard not found.", "not_found")
 
 
+@router.delete("/{dashboard_id}", status_code=204)
+async def delete_dashboard(dashboard_id: uuid.UUID, user: User):
+    if not await dashboard_service.delete_dashboard(user, dashboard_id):
+        return _error(404, "Dashboard not found.", "not_found")
+    return Response(status_code=204)
+
+
+@router.get("/{dashboard_id}/methodology")
+async def methodology(dashboard_id: uuid.UUID, user: User):
+    """The methodology as Markdown and the SQL that produced the current version."""
+    found = await dashboard_service.methodology(user, dashboard_id)
+    return found if found is not None else _error(404, "Dashboard not found.", "not_found")
+
+
 @router.get("/{dashboard_id}/dashboard.html")
 async def export_html(dashboard_id: uuid.UUID, user: User, download: bool = False):
     found = await dashboard_service.export_html(user, dashboard_id)

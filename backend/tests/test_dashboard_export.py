@@ -102,6 +102,35 @@ def test_payload_embeds_only_displayed_columns():
     }
 
 
+def test_methodology_lists_final_queries_and_keeps_text_inert():
+    t = tab().model_copy(update={"limitations": ["Pipes | and\nnewlines stay in one cell."]})
+    run = {"name": "q1", "purpose": "PMPM vs benchmark", "duration_ms": 12}
+    version = {
+        "request": "# not a heading | cell",
+        "outline": OUTLINE.model_dump(),
+        "spec": DashboardSpec(title="t", tabs=[t]).model_dump(),
+        "queries": {
+            "overview": {
+                "plan": plan().model_dump(),
+                "executions": [
+                    {**run, "attempt": 1, "sql": "SELECT bad", "status": "failed"},
+                    {**run, "attempt": 2, "sql": "SELECT 1", "status": "succeeded"},
+                ],
+            }
+        },
+        "results": {"overview": {n: r.model_dump() for n, r in RESULTS.items()}},
+        "version": 1,
+        "created_at": "2026-11-05T00:00:00Z",
+        "dataset_loaded_at": None,
+    }
+    m = dashboard_export.methodology(version)
+    assert [q["sql"] for q in m["queries"]] == ["SELECT 1"] and m["queries"][0]["row_count"] == 1
+    md = m["markdown"]
+    assert "| Request | # not a heading \\| cell |" in md
+    assert "- Pipes \\| and newlines stay in one cell." in md
+    assert "| Metric | PMPM |" in md and "- q1: PMPM vs benchmark (1 rows)" in md
+
+
 def test_html_is_self_contained_and_script_safe():
     p = {
         "title": "</title><script>x()</script>",
@@ -139,7 +168,9 @@ def test_export_endpoint_serves_the_same_sandboxed_file(http, llm):
 
     view, download = http.get(url), http.get(f"{url}?download=true")
     assert view.status_code == 200 and view.text == download.text
-    assert view.headers["content-security-policy"].startswith("sandbox allow-scripts allow-downloads;")
+    assert view.headers["content-security-policy"].startswith(
+        "sandbox allow-scripts allow-downloads;"
+    )
     assert "content-disposition" not in view.headers
     assert (
         download.headers["content-disposition"]

@@ -111,6 +111,103 @@ def payload(v: dict) -> dict:
     }
 
 
+INTERPRETATION_LABELS = {
+    "metric": "Metric",
+    "population": "Population",
+    "period": "Period",
+    "date_basis": "Date basis",
+    "grain": "Grain",
+    "filters": "Filters",
+    "denominator": "Denominator",
+    "sources": "Data sources",
+}
+
+
+def _md(text) -> str:
+    """One line of model or user text, safe inside a list item or table cell."""
+    return " ".join(str(text).split()).replace("|", "\\|")
+
+
+def _md_table(rows: list[tuple[str, str]]) -> list[str]:
+    return ["| Item | Detail |", "| --- | --- |"] + [f"| {k} | {_md(v)} |" for k, v in rows if v]
+
+
+def _md_list(title: str, items: list[str]) -> list[str]:
+    return [f"### {title}", "", *[f"- {_md(i)}" for i in items], ""] if items else []
+
+
+def _executed(v: dict, tab: dict) -> list[dict]:
+    """The final attempt's successful queries for a tab: the SQL behind what it shows."""
+    runs = (v["queries"].get(tab["id"]) or {}).get("executions") or []
+    last = max((e["attempt"] for e in runs), default=0)
+    results = v["results"].get(tab["id"], {})
+    return [
+        {
+            "tab": tab["name"],
+            "name": e["name"],
+            "purpose": e["purpose"],
+            "sql": e["sql"],
+            "row_count": results.get(e["name"], {}).get("row_count"),
+            "duration_ms": e["duration_ms"],
+        }
+        for e in runs
+        if e["attempt"] == last and e["status"] == "succeeded"
+    ]
+
+
+def methodology(v: dict) -> dict:
+    """Markdown methodology and executed SQL, built from what the version stores."""
+    p = payload(v)
+    s = p["scope"]
+    ids = f"TIN {s['provider_tin']}"
+    if s["provider_npi"]:
+        ids = f"NPI {s['provider_npi']}, {ids}"
+    # Dates arrive as datetimes from the database and as ISO strings in tests.
+    loaded = (
+        f" from data loaded {str(p['dataset_loaded_at'])[:10]}" if p["dataset_loaded_at"] else ""
+    )
+    lines = [
+        f"# {_md(p['title'])}",
+        "",
+        f"Generated {str(p['generated_at'])[:10]}{loaded}, version {p['version']}.",
+        "",
+        "## Scope",
+        "",
+        *_md_table(
+            [
+                ("Provider", f"{s['provider_name']} ({ids})"),
+                ("Network", s["network"]),
+                ("Population", s["population"]),
+                ("Reporting period", s["period"]),
+                ("Request", v["request"]),
+            ]
+        ),
+        "",
+    ]
+    queries = []
+    for tab in p["tabs"]:
+        executed = _executed(v, tab)
+        queries += executed
+        interp = tab["methodology"]["interpretation"] or {}
+        lines += [
+            f"## {_md(tab['name'])}",
+            "",
+            *_md_table(
+                [("Question", tab["question"])]
+                + ([("Outcome", tab["takeaway"])] if tab["outcome"] != "answered" else [])
+                + [(label, interp.get(k)) for k, label in INTERPRETATION_LABELS.items()]
+            ),
+            "",
+            *_md_list("Assumptions", tab["assumptions"]),
+            *_md_list("Limitations", tab["limitations"]),
+            *_md_list(
+                "Queries",
+                [f"{q['name']}: {q['purpose']} ({q['row_count']} rows)" for q in executed],
+            ),
+        ]
+    return {"markdown": "\n".join(lines).rstrip() + "\n", "queries": queries}
+
+
 def render_html(p: dict) -> str:
     js, css, digest = _viewer()
     return (

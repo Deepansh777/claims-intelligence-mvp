@@ -54,12 +54,17 @@ async def list_dashboards(db: AsyncSession, user_id: str, days: int) -> list[dic
     rows = await db.execute(
         text(f"""
             SELECT d.id, d.title, d.current_version, d.created_at, d.updated_at,
-                   v.outline->'scope' AS scope,
+                   d.user_id AS created_by, v.outline->'scope' AS scope,
                    (SELECT jsonb_agg(jsonb_build_object('name', t->>'name', 'outcome', t->>'outcome'))
-                    FROM jsonb_array_elements(v.spec->'tabs') t) AS tabs
+                    FROM jsonb_array_elements(v.spec->'tabs') t) AS tabs,
+                   u.attributes->>'model' AS model, b.effort,
+                   u.input_tokens, u.cached_input_tokens, u.output_tokens, u.cost_usd
             FROM app.dashboards d
             JOIN app.dashboard_versions v
               ON v.dashboard_id = d.id AND v.version = d.current_version
+            -- The generation run's totals over all its model calls; the build shares its id.
+            LEFT JOIN llm_metrics.llm_runs u ON u.id = v.llm_run_id
+            LEFT JOIN app.dashboard_builds b ON b.id = v.llm_run_id
             WHERE d.user_id = :u AND {VISIBLE}
             ORDER BY d.updated_at DESC
         """),
@@ -86,6 +91,15 @@ async def get_current_version(
     )
     found = row.mappings().first()
     return dict(found) if found else None
+
+
+async def delete_dashboard(db: AsyncSession, dashboard_id: uuid.UUID, user_id: str) -> bool:
+    """Versions cascade; builds keep their row with dashboard_id set to null."""
+    result = await db.execute(
+        text("DELETE FROM app.dashboards WHERE id = :id AND user_id = :u"),
+        {"id": dashboard_id, "u": user_id},
+    )
+    return result.rowcount > 0
 
 
 BUILD_COLUMNS = (
