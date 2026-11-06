@@ -4,7 +4,17 @@ import { DataTable } from "../components/answer/DataTable";
 import { KpiGrid } from "../components/answer/KpiGrid";
 import { Icon } from "../components/Icon";
 import { formatDate } from "../lib/format";
-import type { Dataset, DashboardPayload, DashboardTab, DashboardWidget, Kpi } from "../lib/types";
+import type {
+  Component,
+  Dataset,
+  DashboardInsight,
+  DashboardPayload,
+  DashboardTab,
+  DashboardWidget,
+  GridDashboardTab,
+  Kpi,
+  LegacyDashboardTab,
+} from "../lib/types";
 import logoUrl from "../assets/logo.png";
 
 const INTERPRETATION_LABELS: Record<string, string> = {
@@ -18,39 +28,89 @@ const INTERPRETATION_LABELS: Record<string, string> = {
   sources: "Sources",
 };
 
+function widgetBody(c: Exclude<Component, Kpi>, data: Record<string, Dataset>): ReactNode {
+  if (c.type === "callout")
+    return (
+      <div className={`banner banner--${c.tone}`}>
+        <Icon name={c.tone === "info" ? "info" : "warn"} />
+        <span>{c.text}</span>
+      </div>
+    );
+  const d = data[c.query];
+  if (!d) return null;
+  return c.type === "table" ? <DataTable spec={c} data={d} /> :
+    c.type === "hbar" ? <HBarView spec={c} data={d} /> :
+    c.type === "scatter" ? <ScatterView spec={c} data={d} /> :
+    <SeriesChartView spec={c} data={d} />;
+}
+
+function kpiGrid(kpis: DashboardWidget[]) {
+  return <KpiGrid key={kpis[0].id} kpis={kpis.map((w) => w.component as Kpi)} ids={kpis.map((w) => `w-${w.id}`)} />;
+}
+
 /** Consecutive KPIs share one grid; everything else renders in order. */
 function Widgets({ widgets, data }: { widgets: DashboardWidget[]; data: Record<string, Dataset> }) {
   const out: ReactNode[] = [];
   let kpis: DashboardWidget[] = [];
   const flush = () => {
-    if (kpis.length)
-      out.push(<KpiGrid key={kpis[0].id} kpis={kpis.map((w) => w.component as Kpi)} ids={kpis.map((w) => `w-${w.id}`)} />);
+    if (kpis.length) out.push(kpiGrid(kpis));
     kpis = [];
   };
   widgets.forEach((w) => {
     const c = w.component;
     if (c.type === "kpi") return void kpis.push(w);
     flush();
-    let body: ReactNode = null;
-    if (c.type === "callout") {
-      body = (
-        <div className={`banner banner--${c.tone}`}>
-          <Icon name={c.tone === "info" ? "info" : "warn"} />
-          <span>{c.text}</span>
-        </div>
-      );
-    } else if (data[c.query]) {
-      const d = data[c.query];
-      body =
-        c.type === "table" ? <DataTable spec={c} data={d} /> :
-        c.type === "hbar" ? <HBarView spec={c} data={d} /> :
-        c.type === "scatter" ? <ScatterView spec={c} data={d} /> :
-        <SeriesChartView spec={c} data={d} />;
-    }
+    const body = widgetBody(c, data);
     if (body) out.push(<div key={w.id} id={`w-${w.id}`} data-widget-id={w.id}>{body}</div>);
   });
   flush();
   return <>{out}</>;
+}
+
+const INSIGHT_STATUS = {
+  adverse: { icon: "warn", label: "Needs attention" },
+  favorable: { icon: "check", label: "Favorable" },
+  neutral: { icon: "info", label: "Note" },
+} as const;
+
+function InsightCard({ insight }: { insight: DashboardInsight }) {
+  const s = INSIGHT_STATUS[insight.status];
+  return (
+    <article className={`dash-insight dash-insight--${insight.status}`}>
+      <div className="dash-insight-status">
+        <Icon name={s.icon} />
+        {insight.label || s.label}
+      </div>
+      <p className="dash-insight-finding">{insight.finding}</p>
+      {insight.next_step && (
+        <p><span className="dash-label">Next step</span>{insight.next_step}</p>
+      )}
+    </article>
+  );
+}
+
+/** KPI row, then up to 3 rows of up to 3 visuals or insights, then the full-width narrative. */
+function GridLayout({ tab, data }: { tab: GridDashboardTab; data: Record<string, Dataset> }) {
+  const items = new Map<string, ReactNode>();
+  tab.widgets.forEach((w) => w.component.type !== "kpi" && items.set(w.id, widgetBody(w.component, data)));
+  tab.insights.forEach((i) => items.set(i.id, <InsightCard insight={i} />));
+  const kpis = tab.widgets.filter((w) => w.component.type === "kpi");
+  return (
+    <>
+      {kpis.length > 0 && kpiGrid(kpis)}
+      {tab.grid.map((row, r) => (
+        <div key={r} className={`dash-row dash-row--${row.length}`}>
+          {row.map((id) => items.get(id) && (
+            <div key={id} id={`w-${id}`} data-widget-id={id}>{items.get(id)}</div>
+          ))}
+        </div>
+      ))}
+      <section className="card dash-narrative" aria-label="Summary">
+        <h2 className="dash-label">Summary</h2>
+        <p className={tab.outcome !== "answered" ? "dash-takeaway--muted" : ""}>{tab.narrative}</p>
+      </section>
+    </>
+  );
 }
 
 function widgetTitle(w: DashboardWidget | undefined) {
@@ -59,7 +119,7 @@ function widgetTitle(w: DashboardWidget | undefined) {
   return c.type === "kpi" ? c.label : c.type === "callout" ? "Note" : c.title;
 }
 
-function Findings({ tab }: { tab: DashboardTab }) {
+function Findings({ tab }: { tab: LegacyDashboardTab }) {
   if (!tab.findings.length) return null;
   const byId = Object.fromEntries(tab.widgets.map((w) => [w.id, w]));
   return (
@@ -127,9 +187,15 @@ function TabPanel({ tab, data }: { tab: DashboardTab; data: Record<string, Datas
   return (
     <div className="dash-panel">
       <p className="dash-question">{tab.question}</p>
-      <p className={"dash-takeaway" + (tab.outcome !== "answered" ? " dash-takeaway--muted" : "")}>{tab.takeaway}</p>
-      <Findings tab={tab} />
-      <Widgets widgets={tab.widgets} data={data} />
+      {"grid" in tab ? (
+        <GridLayout tab={tab} data={data} />
+      ) : (
+        <>
+          <p className={"dash-takeaway" + (tab.outcome !== "answered" ? " dash-takeaway--muted" : "")}>{tab.takeaway}</p>
+          <Findings tab={tab} />
+          <Widgets widgets={tab.widgets} data={data} />
+        </>
+      )}
       {tab.limitations.length > 0 && (
         <div className="banner banner--warn">
           <Icon name="warn" />

@@ -49,23 +49,79 @@ def test_resolve_fills_placeholders_everywhere():
         }
     )
     out = resolve_tab(t, RESULTS, set(), set())
-    assert out["takeaway"] == "PMPM vs. benchmark $175.85."
-    assert out["findings"][0]["finding"] == "Provider PMPM was $113.94."
+    assert out["narrative"].startswith("PMPM vs. benchmark $175.85.")
+    assert out["insights"][0]["finding"] == "Provider PMPM was $113.94."
+    assert out["insights"][0]["status"] == "favorable" and out["grid"] == [["overview-gap"]]
     assert out["widgets"][0]["component"]["value"] == 113.94
     assert out["widgets"][0]["component"]["sub"] == "vs $175.85"
     assert out["limitations"] == ["Benchmark $175.85."]
 
 
-def test_resolve_drops_unchecked_parts_and_findings_left_without_evidence():
+def test_resolve_drops_unchecked_parts_and_insights_left_without_evidence():
     t = tab().model_copy(
         update={
-            "takeaway": "PMPM was 999.",
+            "narrative": "PMPM was 999.",
             "widgets": [Widget(id="overview-pmpm", component=kpi("vs {{q1.nope}}"))],
         }
     )
     out = resolve_tab(t, RESULTS, set(), set())
-    assert out["widgets"] == [] and out["findings"] == []
-    assert out["takeaway"] == "The results are shown below."
+    assert out["widgets"] == [] and out["insights"] == [] and out["grid"] == []
+    assert out["narrative"] == "The results are shown above."
+
+
+def test_resolve_grid_drops_bad_ids_and_appends_unplaced_items():
+    bar = HBar(
+        type="hbar",
+        title="Admissions",
+        query="q2",
+        label="category",
+        value="admissions",
+        format="int",
+        top_n=None,
+    )
+    widgets = tab().widgets + [Widget(id=f"overview-b{i}", component=bar) for i in range(4)]
+    t = tab().model_copy(
+        update={"widgets": widgets, "grid": [["overview-b0", "nope", "overview-b0"], []]}
+    )
+    out = resolve_tab(t, RESULTS, set(), set())
+    assert out["grid"] == [
+        ["overview-b0"],
+        ["overview-b1", "overview-b2", "overview-b3"],
+        ["overview-gap"],
+    ]
+
+
+def test_legacy_tabs_still_resolve():
+    legacy = {
+        "id": "overview",
+        "name": "Performance overview",
+        "outcome": "answered",
+        "takeaway": "PMPM vs. benchmark {{q1.benchmark_pmpm|usd2}}.",
+        "findings": [
+            {
+                "finding": "Provider PMPM was {{q1.provider_pmpm|usd2}}.",
+                "evidence": ["overview-pmpm"],
+                "clinical_context": "",
+                "review_opportunity": "",
+                "limitation": "",
+            }
+        ],
+        "widgets": [{"id": "overview-pmpm", "component": kpi(None).model_dump()}],
+        "assumptions": [],
+        "limitations": [],
+    }
+    t = DashboardSpec.model_validate({"title": "t", "tabs": [legacy]}).tabs[0]
+    out = resolve_tab(t, RESULTS, set(), set())
+    assert out["takeaway"] == "PMPM vs. benchmark $175.85." and "grid" not in out
+    assert out["findings"] == [
+        {
+            "finding": "Provider PMPM was $113.94.",
+            "evidence": ["overview-pmpm"],
+            "clinical_context": "",
+            "review_opportunity": "",
+            "limitation": "",
+        }
+    ]
 
 
 def test_payload_embeds_only_displayed_columns():
@@ -179,5 +235,5 @@ def test_export_endpoint_serves_the_same_sandboxed_file(http, llm):
     data = json.loads(
         re.search(r'id="dashboard-data">(.*?)</script>', view.text, re.DOTALL).group(1)
     )
-    assert data["tabs"][0]["findings"][0]["finding"].startswith("Provider PMPM was $")
+    assert data["tabs"][0]["insights"][0]["finding"].startswith("Provider PMPM was $")
     assert "{{" not in json.dumps(data["tabs"])

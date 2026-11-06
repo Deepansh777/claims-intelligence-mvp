@@ -133,9 +133,10 @@ def _failed_tab(t) -> DashboardTab:
         id=t.id,
         name=t.name,
         outcome="unsupported",
-        takeaway=FAILED_TAB_TEXT,
-        findings=[],
         widgets=[],
+        insights=[],
+        grid=[],
+        narrative=FAILED_TAB_TEXT,
         assumptions=[],
         limitations=[],
     )

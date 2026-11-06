@@ -224,8 +224,16 @@ def answer_errors(
 
 
 FINDING_TEXTS = ("finding", "clinical_context", "review_opportunity", "limitation")
+INSIGHT_TEXTS = ("label", "finding", "next_step")
 WIDGET_TEXTS = ("text", "label", "sub", "title")
 USE_PLACEHOLDER = "; use a placeholder"
+
+
+def _parts(tab):
+    """(lead text field, card kind, cards, card text fields): grid tabs or legacy tabs."""
+    if hasattr(tab, "grid"):
+        return "narrative", "insight", tab.insights, INSIGHT_TEXTS
+    return "takeaway", "finding", tab.findings, FINDING_TEXTS
 
 
 def _prose(text: str, results, values, allowed, hint: str = "") -> tuple[str, list[str]]:
@@ -244,10 +252,11 @@ def _check_tab(tab, results, allowed: set[float], note_allowed: set[float]):
         for w in tab.widgets
         if isinstance(w.component, HBar) and w.component.top_n
     }
-    takeaway = _prose(tab.takeaway, results, values, allowed, USE_PLACEHOLDER)
+    lead, _, cards, fields = _parts(tab)
+    takeaway = _prose(getattr(tab, lead), results, values, allowed, USE_PLACEHOLDER)
     findings = [
-        {k: _prose(getattr(f, k), results, values, allowed, USE_PLACEHOLDER) for k in FINDING_TEXTS}
-        for f in tab.findings
+        {k: _prose(getattr(f, k), results, values, allowed, USE_PLACEHOLDER) for k in fields}
+        for f in cards
     ]
     widgets = []
     for w in tab.widgets:
@@ -267,9 +276,10 @@ def _check_tab(tab, results, allowed: set[float], note_allowed: set[float]):
 def tab_errors(tab, results, allowed: set[float], note_allowed: set[float]) -> list[str]:
     """Same rules as answer_errors, for a dashboard tab's takeaway, findings and widgets."""
     takeaway, findings, widgets, notes = _check_tab(tab, results, allowed, note_allowed)
-    errors = [f"takeaway: {e}" for e in takeaway[1]]
+    lead, kind, _, _ = _parts(tab)
+    errors = [f"{lead}: {e}" for e in takeaway[1]]
     for i, f in enumerate(findings, 1):
-        errors += [f"finding {i} {k}: {e}" for k, (_, errs) in f.items() for e in errs]
+        errors += [f"{kind} {i} {k}: {e}" for k, (_, errs) in f.items() for e in errs]
     for w, (_, errs) in zip(tab.widgets, widgets):
         errors += [f"{w.id}: {e}" for e in errs]
     for key, items in notes.items():
@@ -280,6 +290,7 @@ def tab_errors(tab, results, allowed: set[float], note_allowed: set[float]) -> l
 def resolve_tab(tab, results, allowed: set[float], note_allowed: set[float]) -> dict:
     """Display payload for a tab: placeholders filled; parts that fail the checks are dropped."""
     takeaway, findings, widgets, notes = _check_tab(tab, results, allowed, note_allowed)
+    lead, kind, cards, fields = _parts(tab)
     kept = []
     for w, (texts, errs) in zip(tab.widgets, widgets):
         if not errs:
@@ -288,33 +299,51 @@ def resolve_tab(tab, results, allowed: set[float], note_allowed: set[float]) -> 
             )
     kept_ids = {w["id"] for w in kept}
     out_findings = []
-    for f, checked in zip(tab.findings, findings):
+    for f, checked in zip(cards, findings):
         evidence = [i for i in f.evidence if i in kept_ids]
         if checked["finding"][1] or not evidence:
             continue
         out_findings.append(
-            {k: "" if errs else filled for k, (filled, errs) in checked.items()}
+            f.model_dump(exclude={"evidence", *fields})
+            | {k: "" if errs else filled for k, (filled, errs) in checked.items()}
             | {"evidence": evidence}
         )
     limitations = [filled for filled, errs in notes["limitations"] if not errs]
     text, errs = takeaway
     if errs:
-        text = FALLBACK_TEXT
+        # The narrative sits below the visuals; a takeaway sits above them.
+        text = FALLBACK_TEXT if lead == "takeaway" else "The results are shown above."
         limitations.append(FALLBACK_NOTE)
     outcome = tab.outcome
     if results and all(r.row_count == 0 for r in results.values()):
         outcome = "no_results"
         kept = [w for w in kept if w["component"]["type"] == "callout"]
-    return {
+    out = {
         "id": tab.id,
         "name": tab.name,
         "outcome": outcome,
-        "takeaway": text,
-        "findings": out_findings,
+        lead: text,
+        f"{kind}s": out_findings,
         "widgets": kept,
         "assumptions": [filled for filled, errs in notes["assumptions"] if not errs],
         "limitations": limitations,
     }
+    if hasattr(tab, "grid"):
+        out["grid"] = _grid(tab.grid, kept, out_findings)
+    return out
+
+
+def _grid(rows: list[list[str]], widgets: list[dict], cards: list[dict]) -> list[list[str]]:
+    """The model's rows minus dropped items; anything it left unplaced gets rows of its own."""
+    shown = [w["id"] for w in widgets if w["component"]["type"] != "kpi"]
+    shown += [c["id"] for c in cards]
+    grid, placed = [], set()
+    for row in rows:
+        if r := [i for i in dict.fromkeys(row) if i in shown and i not in placed]:
+            grid.append(r)
+            placed.update(r)
+    rest = [i for i in shown if i not in placed]
+    return grid + [rest[i : i + 3] for i in range(0, len(rest), 3)]
 
 
 def _auto_column(col: str, t: str) -> dict:

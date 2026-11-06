@@ -11,7 +11,7 @@ from app.llm.dashboard_schemas import (
     DashboardOutline,
     DashboardScope,
     DashboardTab,
-    Finding,
+    Insight,
     OutlineResult,
     ProviderSearch,
     TabOutline,
@@ -88,17 +88,22 @@ def tab(finding="Provider PMPM was {{q1.provider_pmpm|usd2}}."):
         id="overview",
         name="Performance overview",
         outcome="answered",
-        takeaway="PMPM vs. benchmark {{q1.benchmark_pmpm|usd2}}.",
-        findings=[
-            Finding(
+        widgets=[Widget(id="overview-pmpm", component=kpi)],
+        insights=[
+            Insight(
+                id="overview-gap",
+                status="favorable",
+                label="Below benchmark",
                 finding=finding,
+                next_step="",
                 evidence=["overview-pmpm"],
-                clinical_context="",
-                review_opportunity="",
-                limitation="",
             )
         ],
-        widgets=[Widget(id="overview-pmpm", component=kpi)],
+        grid=[["overview-gap"]],
+        narrative=(
+            "PMPM vs. benchmark {{q1.benchmark_pmpm|usd2}}. Members are attributed. "
+            "The period is whole. Review the drivers."
+        ),
         assumptions=[],
         limitations=[],
     )
@@ -313,7 +318,7 @@ def test_scope_errors():
     assert scope_errors(group.model_copy(update={"network": "PCN"}), [row])
 
 
-def test_tab_errors_check_findings_and_widgets():
+def test_tab_errors_check_insights_and_widgets():
     results = {
         "q1": QueryResult(
             columns=["provider_pmpm", "benchmark_pmpm"],
@@ -326,10 +331,10 @@ def test_tab_errors_check_findings_and_widgets():
     assert tab_errors(tab(), results, set(), set()) == []
     assert tab_errors(tab("PMPM was 113.94."), results, set(), set()) == []
     assert tab_errors(tab("PMPM was 999."), results, set(), set()) == [
-        "finding 1 finding: number '999' is not in the results; use a placeholder"
+        "insight 1 finding: number '999' is not in the results; use a placeholder"
     ]
     assert tab_errors(tab("{{q1.nope}}"), results, set(), set()) == [
-        "finding 1 finding: placeholder {{q1.nope}}: column 'nope' not in q1"
+        "insight 1 finding: placeholder {{q1.nope}}: column 'nope' not in q1"
     ]
     noted = tab().model_copy(update={"limitations": ["Benchmark {{q1.nope|usd2}}."]})
     assert tab_errors(noted, results, set(), set()) == [

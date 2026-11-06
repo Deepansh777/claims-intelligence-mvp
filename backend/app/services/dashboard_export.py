@@ -194,7 +194,11 @@ def methodology(v: dict) -> dict:
             "",
             *_md_table(
                 [("Question", tab["question"])]
-                + ([("Outcome", tab["takeaway"])] if tab["outcome"] != "answered" else [])
+                + (
+                    [("Outcome", tab.get("narrative", tab.get("takeaway")))]
+                    if tab["outcome"] != "answered"
+                    else []
+                )
                 + [(label, interp.get(k)) for k, label in INTERPRETATION_LABELS.items()]
             ),
             "",

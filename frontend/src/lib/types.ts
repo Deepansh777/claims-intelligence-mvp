@@ -153,13 +153,19 @@ export type DashboardFinding = {
   review_opportunity: string;
   limitation: string;
 };
-export type DashboardTab = {
+export type DashboardInsight = {
+  id: string;
+  status: "adverse" | "favorable" | "neutral";
+  label: string;
+  finding: string;
+  next_step: string;
+  evidence: string[];
+};
+type DashboardTabBase = {
   id: string;
   name: string;
   question: string;
   outcome: "answered" | "no_results" | "unsupported";
-  takeaway: string;
-  findings: DashboardFinding[];
   widgets: DashboardWidget[];
   assumptions: string[];
   limitations: string[];
@@ -168,6 +174,14 @@ export type DashboardTab = {
     queries: { name: string; purpose: string; sql: string }[];
   };
 };
+// Saved before the KPI, grid and narrative layout.
+export type LegacyDashboardTab = DashboardTabBase & { takeaway: string; findings: DashboardFinding[] };
+export type GridDashboardTab = DashboardTabBase & {
+  narrative: string;
+  insights: DashboardInsight[];
+  grid: string[][];
+};
+export type DashboardTab = LegacyDashboardTab | GridDashboardTab;
 export type DashboardScope = {
   level: "pcp" | "pcp_group";
   provider_name: string;

@@ -165,9 +165,10 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
             id=t.id,
             name=t.name,
             outcome="unsupported",
-            takeaway=plan.unsupported or "The available data can't answer this tab's question.",
-            findings=[],
             widgets=[],
+            insights=[],
+            grid=[],
+            narrative=plan.unsupported or "The available data can't answer this tab's question.",
             assumptions=[],
             limitations=[],
         )

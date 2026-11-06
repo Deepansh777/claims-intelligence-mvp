@@ -5,6 +5,7 @@ the Ask guards check a tab exactly like an answer. Counts and uniqueness that st
 output can't express are checked here.
 """
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.llm.schemas import Component, Interpretation, PlannedQuery
 
 MAX_TABS = 3
+MAX_GRID = 3  # rows per tab and ids per row
 
 
 class ProviderSearch(BaseModel):
@@ -78,7 +80,9 @@ class Finding(BaseModel):
     limitation: str = Field(description="What could change the interpretation, or empty.")
 
 
-class DashboardTab(BaseModel):
+class LegacyDashboardTab(BaseModel):
+    """Tab format saved before the KPI, grid and narrative layout; kept so old versions render."""
+
     id: str = Field(description="The outline tab id.")
     name: str
     outcome: Literal["answered", "no_results", "unsupported"]
@@ -89,9 +93,36 @@ class DashboardTab(BaseModel):
     limitations: list[str]
 
 
+class Insight(BaseModel):
+    id: str = Field(description="'<tab id>-<slug>', unique in the dashboard.")
+    status: Literal["adverse", "favorable", "neutral"] = Field(
+        description="Judged after interpreting the metric in context; neutral when ambiguous."
+    )
+    label: str = Field(description="2-4 word status, e.g. 'Above benchmark'.")
+    finding: str = Field(description="One observed pattern; figures only via placeholders.")
+    next_step: str = Field(description="One specific follow-up the data supports, or empty.")
+    evidence: list[str] = Field(description="Ids of this tab's widgets that support the finding.")
+
+
+class DashboardTab(BaseModel):
+    id: str = Field(description="The outline tab id.")
+    name: str
+    outcome: Literal["answered", "no_results", "unsupported"]
+    widgets: list[Widget] = Field(description="KPIs (shown first, in one row), then visuals.")
+    insights: list[Insight] = Field(description="0-2 insight cards.")
+    grid: list[list[str]] = Field(
+        description="Up to 3 rows of 1-3 ids (non-KPI widgets and insights), left to right."
+    )
+    narrative: str = Field(
+        description="4-8 sentences shown below the grid; figures only via placeholders."
+    )
+    assumptions: list[str]
+    limitations: list[str]
+
+
 class DashboardSpec(BaseModel):
     title: str
-    tabs: list[DashboardTab]
+    tabs: list[DashboardTab | LegacyDashboardTab]
 
 
 def outline_errors(outline: DashboardOutline) -> list[str]:
@@ -104,20 +135,39 @@ def outline_errors(outline: DashboardOutline) -> list[str]:
     return errors
 
 
+def sentence_count(text: str) -> int:
+    # Placeholders hold dots ({{q1.col}}); a capital must follow, so "vs. benchmark" isn't an end.
+    return len(re.findall(r"[.!?](?=\s+[A-Z]|\s*$)", re.sub(r"\{\{.*?\}\}", "x", text)))
+
+
 def tab_structure_errors(tab: DashboardTab, tab_id: str) -> list[str]:
     errors = [] if tab.id == tab_id else [f"tab id must be {tab_id!r}"]
-    ids = [w.id for w in tab.widgets]
+    widget_ids = [w.id for w in tab.widgets]
+    ids = widget_ids + [c.id for c in tab.insights]
     errors += [
         f"widget id {i!r} must start with '{tab_id}-'"
         for i in ids
         if not i.startswith(f"{tab_id}-")
     ]
     if len(set(ids)) != len(ids):
-        errors.append("widget ids must be unique")
-    for f in tab.findings:
-        if not f.evidence:
-            errors.append("a finding cites no widget")
-        errors += [f"finding cites unknown widget {i!r}" for i in f.evidence if i not in ids]
+        errors.append("widget and insight ids must be unique")
+    for c in tab.insights:
+        if not c.evidence:
+            errors.append("an insight cites no widget")
+        errors += [f"insight cites unknown widget {i!r}" for i in c.evidence if i not in widget_ids]
+    placeable = [w.id for w in tab.widgets if w.component.type != "kpi"]
+    placeable += [c.id for c in tab.insights]
+    placed = [i for row in tab.grid for i in row]
+    if len(tab.grid) > MAX_GRID:
+        errors.append(f"grid: at most {MAX_GRID} rows")
+    if any(not 1 <= len(row) <= MAX_GRID for row in tab.grid):
+        errors.append(f"grid: each row needs 1-{MAX_GRID} ids")
+    errors += [
+        f"grid: {i!r} is not a non-KPI widget or insight" for i in placed if i not in placeable
+    ]
+    errors += [f"grid: place {i!r} exactly once" for i in placeable if placed.count(i) != 1]
+    if tab.outcome == "answered" and not 4 <= sentence_count(tab.narrative) <= 8:
+        errors.append("narrative: write 4-8 sentences")
     return errors
 
 
