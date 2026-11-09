@@ -5,6 +5,7 @@ import time
 import uuid
 
 from conftest import as_user, db
+from langchain_core.exceptions import ModelConnectionError
 
 from app.llm import client as llm_client
 from app.llm.dashboard_schemas import (
@@ -19,6 +20,7 @@ from app.llm.dashboard_schemas import (
     TabPlan,
     Widget,
 )
+from app.llm.graphs import dashboard
 from app.llm.graphs.dashboard import scope_errors
 from app.llm.guards import tab_errors
 from app.llm.schemas import Interpretation, Kpi, PlannedQuery, QueryResult, Ref
@@ -258,6 +260,35 @@ def test_failed_sql_saves_nothing(http, llm):
     assert result["status"] == "failed" and result["dashboard_id"] is None
     assert result["failed_step"].startswith("Performance overview: ")
     assert http.get("/api/v1/dashboards").json() == []
+
+
+def test_lost_connection_fails_one_tab_and_keeps_the_others(http, monkeypatch):
+    as_user()
+    trend = TabOutline(
+        id="trend",
+        name="Cost trend",
+        question="Where is PMPM going?",
+        metrics=["PMPM"],
+        visuals=["line"],
+    )
+    outline = OUTLINE.model_copy(update={"tabs": [*OUTLINE.tabs, trend]})
+
+    async def fake(schema, system, prompt, effort, config):
+        if '"id":"trend"' in prompt:
+            raise ModelConnectionError("Connection error.")
+        return plan() if schema is TabPlan else tab()
+
+    monkeypatch.setattr(llm_client, "call_structured", fake)
+    result = generate(http, outline)
+
+    assert result["status"] == "built"
+    saved = http.get(f"/api/v1/dashboards/{result['dashboard_id']}").json()
+    assert saved["validation"]["overview"] == {"status": "ok", "errors": []}
+    assert saved["validation"]["trend"] == {
+        "status": "failed",
+        "errors": [dashboard.TAB_CONNECTION_FAILED],
+    }
+    assert [t["outcome"] for t in saved["spec"]["tabs"]] == ["answered", "unsupported"]
 
 
 def test_cancel_stops_build_and_saves_nothing(http, monkeypatch):

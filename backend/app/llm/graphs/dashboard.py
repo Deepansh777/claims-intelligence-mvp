@@ -8,9 +8,11 @@ Ask, nothing here touches the database or runs code: the caller injects `run_que
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Annotated, TypedDict
 
+from langchain_core.exceptions import ModelConnectionError
 from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
@@ -32,6 +34,8 @@ from app.llm.graphs.ask import DOC_NUMBERS, DOCS, MAX_COMPOSE_ATTEMPTS, MAX_SQL_
 from app.llm.graphs.ask import _describe as describe
 from app.llm.guards import numbers_in, tab_errors
 
+log = logging.getLogger(__name__)
+
 SYSTEM = (
     (Path(__file__).resolve().parents[1] / "prompts" / "dashboard_system.md").read_text()
     + "\n\n"
@@ -43,6 +47,7 @@ NO_PROVIDER = "Which PCP or PCP group should the dashboard cover? A name, NPI or
 OUTLINE_FAILED = (
     "I couldn't match that request to one NEXUS PCP. Which provider (name, NPI or TIN)?"
 )
+TAB_CONNECTION_FAILED = "Lost the connection to the model while building this tab."
 
 
 def scope_errors(scope: DashboardScope, candidates: list[dict]) -> list[str]:
@@ -126,7 +131,27 @@ def _status(message: str, step: str) -> None:
     get_stream_writer()({"public": True, "message": message, "step": step})
 
 
+def _empty_tab() -> dict:
+    return {
+        "plan": None,
+        "executions": [],
+        "scripts": [],
+        "results": {},
+        "spec": None,
+        "errors": [],
+    }
+
+
 async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
+    """Contains a dropped model connection: tabs fan out in parallel and one raise kills them all."""
+    try:
+        return await _build_tab(s, config)
+    except ModelConnectionError:
+        log.exception("Tab build lost the model connection", extra={"tab": s["tab"].id})
+        return {"tabs": {s["tab"].id: {**_empty_tab(), "errors": [TAB_CONNECTION_FAILED]}}}
+
+
+async def _build_tab(s: TabState, config: RunnableConfig) -> GenState:
     """Returns {"tabs": {id: {...}}}; `spec` is None when every SQL attempt failed."""
     t, effort = s["tab"], config["configurable"].get("effort", "medium")
     others = "".join(f"\n- {o.name}: {o.question}" for o in s["outline"].tabs if o.id != t.id)
@@ -159,14 +184,7 @@ async def build_tab(s: TabState, config: RunnableConfig) -> GenState:
         executions += new
         if not error:
             break
-    out = {
-        "plan": plan,
-        "executions": executions,
-        "scripts": [],
-        "results": {},
-        "spec": None,
-        "errors": [],
-    }
+    out = {**_empty_tab(), "plan": plan, "executions": executions}
     allowed = tab_allowed(s["request"], s["outline"], plan)
 
     if plan.unsupported or not plan.queries:

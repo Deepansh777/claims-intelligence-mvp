@@ -288,3 +288,24 @@ export type Meta = {
   default_network: string;
   is_admin: boolean;
 };
+
+export type UsageRow = {
+  key: string | null;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  unpriced_calls: number;
+  active_days: number;
+};
+
+export type LlmUsageReport = {
+  period: "day" | "month" | "year";
+  label: string;
+  total: UsageRow;
+  previous: UsageRow | null;
+  series: UsageRow[];
+  by_model: UsageRow[];
+  by_user: UsageRow[];
+  by_feature: UsageRow[];
+};

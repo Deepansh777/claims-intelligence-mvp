@@ -7,6 +7,7 @@ import type { Meta } from "./lib/types";
 import { BuildToasts } from "./components/BuildToasts";
 import { CellTooltip } from "./components/CellTooltip";
 import { Icon } from "./components/Icon";
+import AdminConsolePage from "./pages/AdminConsolePage";
 import AskPage from "./pages/AskPage";
 import ConversationsPage from "./pages/ConversationsPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -65,6 +66,21 @@ function Sidebar({ meta, collapsed, onCollapse }: { meta?: Meta; collapsed: bool
           <span className="nav-label">Data Explorer</span>
         </NavLink>
       </nav>
+      {meta?.is_admin && (
+        <>
+          <div className="nav-section-label">Administration</div>
+          <nav className="nav">
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}
+              title={collapsed ? "Admin Console" : undefined}
+            >
+              <Icon name="admin" />
+              <span className="nav-label">Admin Console</span>
+            </NavLink>
+          </nav>
+        </>
+      )}
       <div className="sidebar-footer">
         <div className="user-chip">
           <span className="user-avatar">{USER.initials}</span>
@@ -109,6 +125,10 @@ export default function App() {
           <Route path="/dashboards" element={<DashboardsPage meta={meta.data} />} />
           <Route path="/dashboards/:dashboardId" element={<DashboardPage meta={meta.data} />} />
           <Route path="/dashboards/:dashboardId/view" element={<DashboardViewPage />} />
+          <Route
+            path="/admin"
+            element={meta.data && !meta.data.is_admin ? <Navigate to="/ask" replace /> : <AdminConsolePage />}
+          />
           <Route path="*" element={<Navigate to="/ask" replace />} />
         </Routes>
       </main>
